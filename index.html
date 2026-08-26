@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>매점 넛지 연구 &middot; 가상 매점 시뮬레이터</title>
+
+<!--
+  이미지 파일 경로 안내 (Image path notes)
+  - 연습용 파노라마: ./assets/practice_pano.jpg  (Scene 2, 튜토리얼용)
+  - 매점 모퉁이 사진: ./assets/store_corner1.jpg ~ store_corner4.jpg (Scene 4, 본실험용)
+  이 HTML 파일과 assets 폴더를 같은 위치에 두고 nudge_study.html을 더블클릭해서 열면 됩니다.
+  로컬 서버 없이도 file:// 로 바로 동작하도록 설계했습니다.
+-->
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<style>
+@font-face{
+  font-family:'Pretendard';
+  src:url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/woff2/PretendardVariable.woff2') format('woff2-variations');
+  font-weight:45 920; font-display:swap;
+}
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+/* ============ Design tokens ============
+   Palette (brief-pinned): deep blue / sky blue, white/light-gray ground
+   --ink        : #0F2545  primary text, near-navy
+   --blue-900   : #12294D  deepest blue (surfaces, headers)
+   --blue-700   : #1B3B6F  primary blue (buttons, active states)
+   --blue-500   : #2F6FB8  mid blue (links, secondary actions)
+   --sky-500    : #4FA3E3  sky accent (highlights, hotspots)
+   --sky-100    : #E4F1FC  soft sky wash (chips, hovers)
+   --bg         : #F3F6FA  app background
+   --surface    : #FFFFFF  card surface
+   --line       : #E1E7EF  hairline borders
+   --good       : #2E9E6D  confirm / healthy category
+   --warn       : #D97A3D  unhealthy category / caution
+   Type: Pretendard (display+body, Korean-native geometric sans) / IBM Plex Mono (data, timers, table numerals)
+   Signature: "추적 조준선" reticle — every logged data point (first click, hotspot ping) flashes a
+   crosshair+radar ring, visually tying the UI to the fact that behavior is being measured.
+*/
+:root{
+  --ink:#0F2545; --blue-900:#12294D; --blue-700:#1B3B6F; --blue-500:#2F6FB8;
+  --sky-500:#4FA3E3; --sky-100:#E4F1FC; --bg:#F3F6FA; --surface:#FFFFFF;
+  --line:#E1E7EF; --good:#2E9E6D; --good-bg:#E7F6EF; --warn:#D97A3D; --warn-bg:#FBEEE3;
+  --shadow-sm:0 1px 2px rgba(15,37,69,.06), 0 1px 1px rgba(15,37,69,.04);
+  --shadow-md:0 8px 24px rgba(15,37,69,.10), 0 2px 6px rgba(15,37,69,.06);
+  --shadow-lg:0 20px 48px rgba(15,37,69,.16);
+  --radius:16px; --radius-sm:10px;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Malgun Gothic',sans-serif;
+  overscroll-behavior:none; -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;}
+button{font-family:inherit;}
+::selection{background:var(--sky-100);}
+
+/* ============ App shell ============ */
+#app{min-height:100dvh; display:flex; flex-direction:column;}
+.scene{display:none; min-height:100dvh; flex-direction:column;}
+.scene.active{display:flex;}
+
+.topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 18px; background:var(--surface); border-bottom:1px solid var(--line);
+  position:sticky; top:0; z-index:20;
+}
+.brand{display:flex; align-items:center; gap:8px; font-weight:800; font-size:15px; color:var(--blue-900);}
+.brand .dot{width:9px; height:9px; border-radius:50%; background:var(--sky-500); box-shadow:0 0 0 4px var(--sky-100);}
+.step-pips{display:flex; gap:6px;}
+.pip{width:6px; height:6px; border-radius:50%; background:var(--line);}
+.pip.on{background:var(--sky-500); width:16px; border-radius:4px; transition:.25s;}
+
+/* ============ Generic centered card layout ============ */
+.center-wrap{flex:1; display:flex; align-items:center; justify-content:center; padding:24px 16px;}
+.card{
+  width:100%; max-width:440px; background:var(--surface); border-radius:var(--radius);
+  box-shadow:var(--shadow-md); padding:32px 26px; border:1px solid var(--line);
+}
+.eyebrow{
+  font-size:12px; font-weight:700; letter-spacing:.06em; color:var(--blue-500);
+  text-transform:uppercase; margin:0 0 10px;
+}
+h1.title{font-size:22px; line-height:1.4; margin:0 0 8px; font-weight:800; color:var(--blue-900);}
+p.lead{font-size:14.5px; line-height:1.65; color:#4A5A73; margin:0 0 22px;}
+.field{margin-bottom:14px;}
+.field label{display:block; font-size:12.5px; font-weight:700; color:var(--blue-900); margin-bottom:6px;}
+.field input{
+  width:100%; padding:13px 14px; border-radius:var(--radius-sm); border:1.5px solid var(--line);
+  font-size:15px; background:#FBFCFE; color:var(--ink); transition:.15s;
+}
+.field input:focus{outline:none; border-color:var(--sky-500); background:#fff; box-shadow:0 0 0 4px var(--sky-100);}
+.hint{font-size:12px; color:#8593AB; line-height:1.6; margin:16px 0 20px; padding:12px 14px; background:var(--sky-100); border-radius:var(--radius-sm);}
+.btn{
+  appearance:none; border:none; cursor:pointer; width:100%;
+  padding:15px 18px; border-radius:12px; font-size:15.5px; font-weight:700;
+  background:var(--blue-700); color:#fff; box-shadow:var(--shadow-sm);
+  transition:transform .12s, box-shadow .12s, background .15s;
+}
+.btn:active{transform:scale(.98);}
+.btn:hover{background:var(--blue-900);}
+.btn.secondary{background:#fff; color:var(--blue-700); border:1.5px solid var(--line);}
+.btn.secondary:hover{background:var(--sky-100); border-color:var(--sky-500);}
+.btn:disabled{opacity:.45; cursor:not-allowed;}
+.admin-link{
+  display:block; text-align:center; margin-top:22px; font-size:12px; color:#A6B1C4;
+  text-decoration:none; letter-spacing:.02em;
+}
+.admin-link:hover{color:var(--blue-500);}
+.err{color:#C4432B; font-size:12.5px; margin-top:4px; display:none; font-weight:600;}
+
+/* ============ Panorama viewer (Scene 2 & 4 share this engine) ============ */
+.viewer-header{padding:16px 18px 4px; text-align:center;}
+.viewer-header .mission{
+  display:inline-block; background:var(--blue-900); color:#fff; padding:12px 18px;
+  border-radius:14px; font-size:13.5px; line-height:1.55; font-weight:600; max-width:520px;
+  box-shadow:var(--shadow-sm);
+}
+.viewer-header .mission b{color:var(--sky-500); font-weight:800;}
+.pano-stage{
+  position:relative; flex:1; margin:14px; border-radius:20px; overflow:hidden;
+  background:#0B1A30; box-shadow:var(--shadow-lg); min-height:280px; touch-action:none;
+  border:1px solid rgba(255,255,255,.06);
+}
+.pano-track{position:absolute; top:0; left:0; height:100%; will-change:transform; cursor:grab;}
+.pano-track:active{cursor:grabbing;}
+.pano-track img{height:100%; width:auto; display:block; -webkit-user-drag:none; user-select:none; pointer-events:none;}
+.pano-fade{position:absolute; inset:0; pointer-events:none; transition:opacity .18s;}
+.pano-fade.left{background:linear-gradient(90deg, rgba(11,26,48,.55), transparent 14%);}
+.pano-fade.right{background:linear-gradient(270deg, rgba(11,26,48,.55), transparent 14%);}
+
+.pano-arrow{
+  position:absolute; top:50%; transform:translateY(-50%); z-index:8;
+  width:46px; height:46px; border-radius:50%; border:none; cursor:pointer;
+  background:rgba(255,255,255,.92); color:var(--blue-900); font-size:20px; font-weight:800;
+  box-shadow:var(--shadow-md); display:flex; align-items:center; justify-content:center;
+  transition:.15s;
+}
+.pano-arrow:hover{background:#fff; transform:translateY(-50%) scale(1.06);}
+.pano-arrow.l{left:12px;} .pano-arrow.r{right:12px;}
+.pano-swipehint{
+  position:absolute; bottom:12px; left:50%; transform:translateX(-50%); z-index:8;
+  font-size:11.5px; color:rgba(255,255,255,.85); background:rgba(15,37,69,.55);
+  padding:6px 12px; border-radius:20px; letter-spacing:.02em; pointer-events:none;
+  transition:opacity .4s;
+}
+.corner-badge{
+  position:absolute; top:12px; left:12px; z-index:8; display:flex; gap:5px;
+}
+.corner-badge span{
+  width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,.35); transition:.2s;
+}
+.corner-badge span.on{background:var(--sky-500); box-shadow:0 0 0 3px rgba(79,163,227,.35);}
+
+.explore-counter{
+  position:absolute; top:12px; right:12px; z-index:8; background:rgba(15,37,69,.55); color:#fff;
+  font-size:11px; padding:6px 10px; border-radius:20px; display:flex; align-items:center; gap:6px;
+}
+.explore-counter b{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--sky-500);}
+
+/* reticle ping — signature motif for logged interactions */
+.reticle{
+  position:absolute; width:46px; height:46px; margin:-23px 0 0 -23px; z-index:9; pointer-events:none;
+}
+.reticle::before,.reticle::after{
+  content:''; position:absolute; inset:0; border-radius:50%; border:2px solid var(--sky-500);
+  animation:reticlePing .7s ease-out forwards;
+}
+.reticle::after{animation-delay:.12s;}
+.reticle .cross{position:absolute; inset:0;}
+.reticle .cross i{position:absolute; background:var(--sky-500); border-radius:2px;}
+.reticle .cross i:nth-child(1){left:21px; top:6px; width:4px; height:12px;}
+.reticle .cross i:nth-child(2){left:21px; bottom:6px; width:4px; height:12px;}
+.reticle .cross i:nth-child(3){top:21px; left:6px; height:4px; width:12px;}
+.reticle .cross i:nth-child(4){top:21px; right:6px; height:4px; width:12px;}
+@keyframes reticlePing{0%{transform:scale(.3); opacity:1;} 100%{transform:scale(1.6); opacity:0;}}
+
+.tutorial-toast{
+  position:absolute; left:50%; top:16px; transform:translate(-50%,-140%); z-index:10;
+  background:var(--good); color:#fff; padding:12px 20px; border-radius:12px; font-weight:700;
+  font-size:14px; box-shadow:var(--shadow-md); transition:transform .35s cubic-bezier(.2,.9,.3,1.2);
+}
+.tutorial-toast.show{transform:translate(-50%,0);}
+
+/* ============ Scene 3 — scenario ============ */
+.scenario-wrap{flex:1; display:flex; align-items:center; justify-content:center; padding:24px;}
+.scenario-card{
+  max-width:460px; background:var(--blue-900); color:#fff; border-radius:22px;
+  padding:36px 28px; box-shadow:var(--shadow-lg); position:relative; overflow:hidden;
+}
+.scenario-card::before{
+  content:''; position:absolute; top:-60px; right:-60px; width:180px; height:180px; border-radius:50%;
+  background:radial-gradient(circle, rgba(79,163,227,.35), transparent 70%);
+}
+.scenario-bell{font-size:13px; font-weight:700; color:var(--sky-500); letter-spacing:.08em; text-transform:uppercase; margin-bottom:14px;}
+.scenario-quote{font-size:19px; line-height:1.65; font-weight:600; margin:0 0 28px; position:relative;}
+.scenario-quote b{color:var(--sky-500);}
+.scenario-card .btn{background:var(--sky-500);}
+.scenario-card .btn:hover{background:#3D8FD1;}
+
+/* ============ Scene 5 — done ============ */
+.done-icon{
+  width:72px; height:72px; border-radius:50%; background:var(--good-bg); color:var(--good);
+  display:flex; align-items:center; justify-content:center; font-size:34px; margin:0 auto 18px;
+}
+.summary-row{display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px dashed var(--line); font-size:13.5px;}
+.summary-row span:first-child{color:#7A8AA3;}
+.summary-row span:last-child{font-weight:700; color:var(--blue-900); font-family:'IBM Plex Mono',monospace;}
+
+/* ============ Confirm modal ============ */
+.modal-overlay{
+  position:fixed; inset:0; background:rgba(11,26,48,.55); backdrop-filter:blur(2px);
+  display:none; align-items:center; justify-content:center; z-index:50; padding:20px;
+}
+.modal-overlay.show{display:flex;}
+.modal-box{
+  background:#fff; border-radius:18px; padding:26px 24px; max-width:340px; width:100%;
+  box-shadow:var(--shadow-lg); text-align:center;
+}
+.modal-box .item-name{font-size:17px; font-weight:800; color:var(--blue-900); margin:6px 0 2px;}
+.modal-box p{font-size:13.5px; color:#5B6B85; margin:0 0 20px;}
+.modal-actions{display:flex; gap:10px;}
+.modal-actions .btn{padding:12px;}
+
+/* ============ Dashboard ============ */
+.dash{background:var(--bg); min-height:100dvh; padding-bottom:60px;}
+.dash-header{
+  background:var(--blue-900); color:#fff; padding:22px 20px 60px; position:relative; overflow:hidden;
+}
+.dash-header::after{
+  content:''; position:absolute; inset:0; background:
+    radial-gradient(circle at 85% -10%, rgba(79,163,227,.30), transparent 55%);
+}
+.dash-header-row{display:flex; align-items:center; justify-content:space-between; position:relative; z-index:1;}
+.dash-title{font-size:19px; font-weight:800; display:flex; align-items:center; gap:8px;}
+.dash-title .dot{width:9px; height:9px; border-radius:50%; background:var(--sky-500); box-shadow:0 0 0 4px rgba(79,163,227,.3);}
+.dash-sub{font-size:12.5px; color:#AFC2DE; margin-top:5px; position:relative; z-index:1;}
+.dash-actions{display:flex; gap:8px;}
+.chip-btn{
+  background:rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.2);
+  padding:9px 14px; border-radius:20px; font-size:12.5px; font-weight:600; cursor:pointer;
+}
+.chip-btn:hover{background:rgba(255,255,255,.2);}
+
+.dash-body{max-width:1080px; margin:-40px auto 0; padding:0 18px;}
+.kpi-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:18px;}
+.kpi-card{
+  background:#fff; border-radius:16px; padding:18px 16px; box-shadow:var(--shadow-md); border:1px solid var(--line);
+}
+.kpi-label{font-size:11.5px; color:#8593AB; font-weight:700; letter-spacing:.02em;}
+.kpi-value{font-size:26px; font-weight:800; color:var(--blue-900); margin-top:6px; font-family:'IBM Plex Mono',monospace;}
+.kpi-value small{font-size:13px; font-weight:600; color:#8593AB;}
+
+.chart-grid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-bottom:18px;}
+.chart-card{background:#fff; border-radius:16px; padding:18px; box-shadow:var(--shadow-sm); border:1px solid var(--line);}
+.chart-card h3{margin:0 0 4px; font-size:13.5px; color:var(--blue-900); font-weight:800;}
+.chart-card p.desc{margin:0 0 12px; font-size:11.5px; color:#94A2B8;}
+.chart-box{position:relative; height:190px;}
+
+.table-card{background:#fff; border-radius:16px; box-shadow:var(--shadow-sm); border:1px solid var(--line); overflow:hidden;}
+.table-head{display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--line);}
+.table-head h3{margin:0; font-size:14px; color:var(--blue-900); font-weight:800;}
+.table-wrap{overflow-x:auto;}
+table{width:100%; border-collapse:collapse; font-size:12.5px; min-width:720px;}
+thead th{
+  text-align:left; padding:10px 14px; background:#F8FAFD; color:#7A8AA3; font-weight:700;
+  font-size:11px; text-transform:uppercase; letter-spacing:.03em; border-bottom:1px solid var(--line); white-space:nowrap;
+}
+tbody td{padding:11px 14px; border-bottom:1px solid #F0F3F8; color:var(--ink); white-space:nowrap;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover{background:#FAFBFD;}
+.tag{padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700;}
+.tag.healthy{background:var(--good-bg); color:var(--good);}
+.tag.unhealthy{background:var(--warn-bg); color:var(--warn);}
+td.mono, th.mono{font-family:'IBM Plex Mono',monospace;}
+.empty-state{padding:60px 20px; text-align:center; color:#8593AB;}
+.empty-state .glyph{font-size:34px; margin-bottom:10px;}
+.empty-state h4{margin:0 0 6px; color:var(--blue-900); font-size:15px;}
+.empty-state p{margin:0; font-size:13px; max-width:320px; margin:0 auto;}
+
+@media (max-width:860px){
+  .kpi-grid{grid-template-columns:1fr; }
+  .chart-grid{grid-template-columns:1fr;}
+}
+@media (max-width:480px){
+  .card{padding:26px 20px;}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ SCENE 1 : 로그인 ============ -->
+  <section class="scene active" id="scene-1">
+    <div class="topbar">
+      <div class="brand"><span class="dot"></span>가상 매점 연구</div>
+      <div class="step-pips">
+        <span class="pip on"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span>
+      </div>
+    </div>
+    <div class="center-wrap">
+      <div class="card">
+        <p class="eyebrow">Behavioral Nudge Study</p>
+        <h1 class="title">행동 연구를 위한<br>가상 매점 체험에 오신 것을<br>환영합니다.</h1>
+        <p class="lead">간단한 정보를 입력하고 짧은 매점 체험을 진행해주세요. 소요 시간은 약 2분입니다.</p>
+        <div class="field">
+          <label for="in-sid">학번</label>
+          <input id="in-sid" inputmode="numeric" placeholder="예: 20304" autocomplete="off">
+          <div class="err" id="err-sid">학번을 입력해주세요.</div>
+        </div>
+        <div class="field">
+          <label for="in-name">이름</label>
+          <input id="in-name" placeholder="예: 홍길동" autocomplete="off">
+          <div class="err" id="err-name">이름을 입력해주세요.</div>
+        </div>
+        <div class="hint">입력된 정보는 연구 조사 목적 이외에는 사용되지 않습니다.</div>
+        <button class="btn" id="btn-start">시작하기</button>
+        <a href="#admin" class="admin-link">연구자용 대시보드 →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCENE 2 : 튜토리얼 ============ -->
+  <section class="scene" id="scene-2">
+    <div class="topbar">
+      <div class="brand"><span class="dot"></span>연습 공간</div>
+      <div class="step-pips">
+        <span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span>
+      </div>
+    </div>
+    <div class="viewer-header">
+      <div class="mission">화면을 좌우로 둘러본 후, <b>흰색 화분</b>을 찾아 터치하세요!</div>
+    </div>
+    <div class="pano-stage" id="stage-practice">
+      <!-- practice_pano.jpg : 연습용 360도(등각투영) 파노라마 -->
+      <div class="pano-track" id="track-practice">
+        <img src="./assets/practice_pano.jpg" draggable="false" alt="연습용 파노라마">
+      </div>
+      <div class="pano-fade left"></div>
+      <div class="pano-fade right"></div>
+      <button class="pano-arrow l" id="arrow-practice-l">‹</button>
+      <button class="pano-arrow r" id="arrow-practice-r">›</button>
+      <div class="pano-swipehint" id="hint-practice">← 드래그해서 둘러보기 →</div>
+      <div class="tutorial-toast" id="toast-practice">✓ 정답입니다! 다음 장면으로 이동합니다…</div>
+    </div>
+  </section>
+
+  <!-- ============ SCENE 3 : 시나리오 ============ -->
+  <section class="scene" id="scene-3">
+    <div class="topbar">
+      <div class="brand"><span class="dot"></span>상황 안내</div>
+      <div class="step-pips">
+        <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span><span class="pip"></span>
+      </div>
+    </div>
+    <div class="scenario-wrap">
+      <div class="scenario-card">
+        <div class="scenario-bell">🔔 SCENARIO</div>
+        <p class="scenario-quote">"쉬는 시간 종이 쳤습니다! 배가 너무 고픈 당신, 매점에 들어서자마자 <b>지금 당장 먹고 싶은 간식 1개</b>를 빠르게 골라 터치하세요!"</p>
+        <button class="btn" id="btn-enter-store">매점 입장하기</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCENE 4 : 본실험 ============ -->
+  <section class="scene" id="scene-4">
+    <div class="topbar">
+      <div class="brand"><span class="dot"></span>매점 둘러보기</div>
+      <div class="step-pips">
+        <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span>
+      </div>
+    </div>
+    <div class="viewer-header">
+      <div class="mission">지금 가장 먹고 싶은 간식을 하나 골라 <b>터치</b>하세요</div>
+    </div>
+    <div class="pano-stage" id="stage-store">
+      <!-- store_corner1~4.jpg : 매점 사방 모퉁이 스틸컷 4장, 순환 회전 -->
+      <div class="pano-track" id="track-store">
+        <img src="./assets/store_corner1.jpg" draggable="false" alt="매점 모퉁이">
+      </div>
+      <div class="pano-fade left"></div>
+      <div class="pano-fade right"></div>
+      <div class="corner-badge" id="corner-badge">
+        <span class="on"></span><span></span><span></span><span></span>
+      </div>
+      <div class="explore-counter">회전 <b id="explore-count">0</b>회</div>
+      <button class="pano-arrow l" id="arrow-store-l">‹</button>
+      <button class="pano-arrow r" id="arrow-store-r">›</button>
+      <div class="pano-swipehint" id="hint-store">← 구역 전환 · 드래그로 둘러보기 →</div>
+    </div>
+  </section>
+
+  <!-- ============ SCENE 5 : 완료 ============ -->
+  <section class="scene" id="scene-5">
+    <div class="topbar">
+      <div class="brand"><span class="dot"></span>완료</div>
+      <div class="step-pips">
+        <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span>
+      </div>
+    </div>
+    <div class="center-wrap">
+      <div class="card" style="text-align:center;">
+        <div class="done-icon">✓</div>
+        <h1 class="title">조사에 참여해주셔서<br>감사합니다!</h1>
+        <p class="lead">응답이 안전하게 저장되었습니다.</p>
+        <div style="text-align:left; margin-bottom:22px;">
+          <div class="summary-row"><span>선택한 간식</span><span id="sum-item">-</span></div>
+          <div class="summary-row"><span>의사결정 시간</span><span id="sum-time">-</span></div>
+          <div class="summary-row"><span>화면 탐색 횟수</span><span id="sum-explore">-</span></div>
+        </div>
+        <button class="btn" id="btn-restart">처음으로</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DASHBOARD ============ -->
+  <section class="scene" id="scene-admin">
+    <div class="dash">
+      <div class="dash-header">
+        <div class="dash-header-row">
+          <div>
+            <div class="dash-title"><span class="dot"></span>넛지 연구 대시보드</div>
+            <div class="dash-sub">Nudge Study Analytics · 실시간 로컬 데이터 기준</div>
+          </div>
+          <div class="dash-actions">
+            <button class="chip-btn" id="btn-export-csv">⇩ CSV 다운로드</button>
+            <button class="chip-btn" id="btn-reset-data">데이터 초기화</button>
+            <a class="chip-btn" href="#" id="btn-back-sim" style="text-decoration:none; display:flex; align-items:center;">체험 화면으로</a>
+          </div>
+        </div>
+      </div>
+      <div class="dash-body">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">총 참여 피험자 수</div>
+            <div class="kpi-value" id="kpi-total">0<small> 명</small></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">평균 의사결정 소요 시간</div>
+            <div class="kpi-value" id="kpi-avgtime">0.0<small> 초</small></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">첫 클릭 인기 구역 Top 1</div>
+            <div class="kpi-value" id="kpi-topitem" style="font-size:16px;">-</div>
+          </div>
+        </div>
+
+        <div class="chart-grid">
+          <div class="chart-card">
+            <h3>Visual Salience</h3>
+            <p class="desc">첫 클릭 위치 / 아이템 비율</p>
+            <div class="chart-box"><canvas id="chart-salience"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <h3>System 1 / 2 반응</h3>
+            <p class="desc">의사결정 소요 시간대 분포</p>
+            <div class="chart-box"><canvas id="chart-speed"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <h3>최종 선택 비율</h3>
+            <p class="desc">건강 간식 vs 불량식품</p>
+            <div class="chart-box"><canvas id="chart-category"></canvas></div>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-head">
+            <h3>참가자 원자료 (Raw Data)</h3>
+            <span style="font-size:11.5px; color:#8593AB;" id="table-count">0건</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>학번</th><th>이름</th><th>첫 클릭 구역</th><th>최종 선택 간식</th>
+                  <th class="mono">소요시간(초)</th><th class="mono">탐색횟수</th><th>참여 일시</th>
+                </tr>
+              </thead>
+              <tbody id="table-body"></tbody>
+            </table>
+          </div>
+          <div class="empty-state" id="empty-state" style="display:none;">
+            <div class="glyph">🗂️</div>
+            <h4>아직 수집된 데이터가 없습니다</h4>
+            <p>체험 화면에서 피험자가 시뮬레이션을 완료하면 이곳에 자동으로 집계됩니다.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============ 확인 모달 ============ -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal-box">
+    <div style="font-size:28px;">🛍️</div>
+    <div class="item-name" id="modal-item-name">간식 이름</div>
+    <p>이 간식을 선택하시겠습니까?</p>
+    <div class="modal-actions">
+      <button class="btn secondary" id="modal-cancel">아니오</button>
+      <button class="btn" id="modal-confirm">예, 선택할게요</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ======================================================================
+   데이터 저장 스키마 (localStorage key: nudge_study_participants)
+   [{ student_id, name, first_click_item, first_click_corner, decision_time_sec,
+      exploration_count, final_item, final_category, timestamp }]
+   ====================================================================== */
+const STORAGE_KEY = "nudge_study_participants";
+
+function loadData(){
+  try{ return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
+  catch(e){ return []; }
+}
+function saveRecord(rec){
+  const all = loadData();
+  all.push(rec);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+}
+
+/* ======================================================================
+   핫스팟 정의 — 각 사진 위 %좌표 기준. 실제 촬영 이미지 내용에 맞춰 배치.
+   category: 'healthy' | 'unhealthy'  (Scene 5 통계용 대분류)
+   ====================================================================== */
+const PRACTICE_HOTSPOT = { id:"white_pot", name:"흰색 화분", x:91, y:60, r:11 };
+
+const CORNER_HOTSPOTS = {
+  1: [
+    { id:"c1_candy", name:"하리보 젤리 & 사탕", x:30, y:55, r:11, category:"unhealthy" },
+    { id:"c1_icecream", name:"아이스크림 냉동고", x:62, y:66, r:10, category:"unhealthy" },
+    { id:"c1_chips", name:"과자류 진열대", x:83, y:48, r:10, category:"unhealthy" },
+  ],
+  2: [
+    { id:"c2_water", name:"생수 · 음료 냉장고", x:9,  y:55, r:10, category:"healthy" },
+    { id:"c2_frozen", name:"냉동 간식 코너", x:48, y:62, r:11, category:"unhealthy" },
+    { id:"c2_chips", name:"과자 진열대", x:73, y:48, r:11, category:"unhealthy" },
+  ],
+  3: [
+    { id:"c3_drink", name:"음료수 냉장고", x:8,  y:55, r:10, category:"healthy" },
+    { id:"c3_chips", name:"과자류 선반", x:47, y:44, r:11, category:"unhealthy" },
+    { id:"c3_counter", name:"계산대 앞 간식", x:90, y:56, r:9,  category:"unhealthy" },
+  ],
+  4: [
+    { id:"c4_dairy", name:"유제품 · 음료 냉장고", x:4,  y:55, r:9,  category:"healthy" },
+    { id:"c4_chips", name:"과자류 진열대", x:23, y:44, r:11, category:"unhealthy" },
+    { id:"c4_drink", name:"음료 냉장고", x:94, y:50, r:8,  category:"healthy" },
+  ],
+};
+
+/* ======================================================================
+   Scene 전환
+   ====================================================================== */
+function showScene(id){
+  document.querySelectorAll(".scene").forEach(s=>s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  window.scrollTo(0,0);
+}
+
+/* ======================================================================
+   범용 파노라마 뷰어 엔진 (드래그 팬 + 화살표)
+   ====================================================================== */
+function makePanoViewer(stageEl, trackEl, arrowL, arrowR){
+  let offset = 0, dragging = false, startX = 0, startOffset = 0, startT = 0;
+  let onTap = null, onFling = null;
+
+  function bounds(){
+    const stageW = stageEl.clientWidth;
+    const img = trackEl.querySelector("img");
+    const trackW = img ? img.getBoundingClientRect().width : stageW;
+    return { min: Math.min(0, stageW - trackW), max: 0, trackW, stageW };
+  }
+  function apply(){ trackEl.style.transform = `translateX(${offset}px)`; }
+  function clamp(v){ const b = bounds(); return Math.max(b.min, Math.min(b.max, v)); }
+  function nudge(dir){
+    const b = bounds();
+    offset = clamp(offset + dir * b.stageW * 0.55);
+    apply();
+  }
+  function reset(){ offset = 0; apply(); }
+
+  function pointerDown(e){
+    dragging = true; startT = Date.now();
+    startX = (e.touches ? e.touches[0].clientX : e.clientX);
+    startOffset = offset;
+    trackEl.style.transition = "none";
+  }
+  function pointerMove(e){
+    if(!dragging) return;
+    const x = (e.touches ? e.touches[0].clientX : e.clientX);
+    offset = clamp(startOffset + (x - startX));
+    apply();
+  }
+  function pointerUp(e){
+    if(!dragging) return;
+    dragging = false;
+    trackEl.style.transition = "transform .3s ease";
+    const x = (e.changedTouches ? e.changedTouches[0].clientX : e.clientX);
+    const dx = x - startX;
+    const dt = Math.max(1, Date.now() - startT);
+    const velocity = Math.abs(dx) / dt;
+    if(Math.abs(dx) < 6 && dt < 350){
+      // 탭으로 간주
+      const rect = stageEl.getBoundingClientRect();
+      const clickX = x - rect.left;
+      const clickY = (e.changedTouches ? e.changedTouches[0].clientY : e.clientY) - rect.top;
+      if(onTap) onTap(clickX, clickY);
+    } else if(velocity > 0.55 && Math.abs(dx) > 60 && onFling){
+      onFling(dx < 0 ? 1 : -1);
+    }
+  }
+
+  stageEl.addEventListener("mousedown", pointerDown);
+  stageEl.addEventListener("mousemove", pointerMove);
+  window.addEventListener("mouseup", pointerUp);
+  stageEl.addEventListener("touchstart", pointerDown, {passive:true});
+  stageEl.addEventListener("touchmove", pointerMove, {passive:true});
+  stageEl.addEventListener("touchend", pointerUp);
+
+  arrowL.addEventListener("click", ()=>nudge(1));
+  arrowR.addEventListener("click", ()=>nudge(-1));
+
+  return {
+    reset,
+    setTapHandler(fn){ onTap = fn; },
+    setFlingHandler(fn){ onFling = fn; },
+    toPercent(clickX, clickY){
+      const b = bounds();
+      const imgX = clickX - offset;
+      const xPct = Math.max(0, Math.min(100, (imgX / b.trackW) * 100));
+      const yPct = Math.max(0, Math.min(100, (clickY / stageEl.clientHeight) * 100));
+      return { xPct, yPct };
+    }
+  };
+}
+
+function nearestHotspot(hotspots, xPct, yPct){
+  let best = null, bestDist = Infinity;
+  hotspots.forEach(h=>{
+    const d = Math.hypot(h.x - xPct, h.y - yPct);
+    if(d < bestDist){ bestDist = d; best = h; }
+  });
+  if(best && bestDist <= best.r) return best;
+  return null;
+}
+
+function spawnReticle(stageEl, x, y){
+  const r = document.createElement("div");
+  r.className = "reticle";
+  r.style.left = x + "px"; r.style.top = y + "px";
+  r.innerHTML = '<div class="cross"><i></i><i></i><i></i><i></i></div>';
+  stageEl.appendChild(r);
+  setTimeout(()=>r.remove(), 750);
+}
+
+/* ======================================================================
+   SCENE 1 — 로그인
+   ====================================================================== */
+const inSid = document.getElementById("in-sid");
+const inName = document.getElementById("in-name");
+document.getElementById("btn-start").addEventListener("click", ()=>{
+  let ok = true;
+  document.getElementById("err-sid").style.display = "none";
+  document.getElementById("err-name").style.display = "none";
+  if(!inSid.value.trim()){ document.getElementById("err-sid").style.display = "block"; ok = false; }
+  if(!inName.value.trim()){ document.getElementById("err-name").style.display = "block"; ok = false; }
+  if(!ok) return;
+  session.student_id = inSid.value.trim();
+  session.name = inName.value.trim();
+  showScene("scene-2");
+});
+
+/* ======================================================================
+   SCENE 2 — 튜토리얼
+   ====================================================================== */
+const stagePractice = document.getElementById("stage-practice");
+const trackPractice = document.getElementById("track-practice");
+const practiceViewer = makePanoViewer(
+  stagePractice, trackPractice,
+  document.getElementById("arrow-practice-l"), document.getElementById("arrow-practice-r")
+);
+practiceViewer.setTapHandler((x,y)=>{
+  spawnReticle(stagePractice, x, y);
+  const { xPct, yPct } = practiceViewer.toPercent(x, y);
+  const hit = nearestHotspot([PRACTICE_HOTSPOT], xPct, yPct);
+  if(hit){
+    document.getElementById("hint-practice").style.opacity = "0";
+    const toast = document.getElementById("toast-practice");
+    toast.classList.add("show");
+    setTimeout(()=>{ showScene("scene-3"); toast.classList.remove("show"); }, 1100);
+  }
+});
+
+/* ======================================================================
+   SCENE 3 — 시나리오
+   ====================================================================== */
+document.getElementById("btn-enter-store").addEventListener("click", ()=>{
+  session.decisionStart = performance.now();
+  session.explorationCount = 0;
+  session.firstClick = null;
+  session.currentCorner = 1;
+  storeViewer.reset();
+  updateCornerUI();
+  showScene("scene-4");
+});
+
+/* ======================================================================
+   SCENE 4 — 본실험
+   ====================================================================== */
+const stageStore = document.getElementById("stage-store");
+const trackStore = document.getElementById("track-store");
+const storeImg = trackStore.querySelector("img");
+const cornerBadge = document.getElementById("corner-badge").querySelectorAll("span");
+const exploreCountEl = document.getElementById("explore-count");
+
+const storeViewer = makePanoViewer(
+  stageStore, trackStore,
+  document.getElementById("arrow-store-l"), document.getElementById("arrow-store-r")
+);
+
+function updateCornerUI(){
+  storeImg.src = `./assets/store_corner${session.currentCorner}.jpg`;
+  cornerBadge.forEach((el,i)=> el.classList.toggle("on", i === session.currentCorner-1));
+  exploreCountEl.textContent = session.explorationCount;
+}
+function switchCorner(dir){
+  session.currentCorner = ((session.currentCorner - 1 + dir + 4) % 4) + 1;
+  session.explorationCount++;
+  storeViewer.reset();
+  updateCornerUI();
+  document.getElementById("hint-store").style.opacity = "0";
+}
+document.getElementById("arrow-store-l").addEventListener("click", ()=>switchCorner(-1));
+document.getElementById("arrow-store-r").addEventListener("click", ()=>switchCorner(1));
+storeViewer.setFlingHandler((dir)=>switchCorner(dir));
+
+storeViewer.setTapHandler((x,y)=>{
+  spawnReticle(stageStore, x, y);
+  const { xPct, yPct } = storeViewer.toPercent(x, y);
+  const hotspots = CORNER_HOTSPOTS[session.currentCorner];
+  const hit = nearestHotspot(hotspots, xPct, yPct);
+
+  if(!session.firstClick){
+    session.firstClick = {
+      item: hit ? hit.name : "빈 공간(핫스팟 외 영역)",
+      corner: session.currentCorner,
+      xPct: Math.round(xPct*10)/10, yPct: Math.round(yPct*10)/10
+    };
+  }
+  if(hit){
+    pendingChoice = { name: hit.name, category: hit.category };
+    document.getElementById("modal-item-name").textContent = hit.name;
+    document.getElementById("modal-overlay").classList.add("show");
+  }
+});
+
+let pendingChoice = null;
+document.getElementById("modal-cancel").addEventListener("click", ()=>{
+  document.getElementById("modal-overlay").classList.remove("show");
+  pendingChoice = null;
+});
+document.getElementById("modal-confirm").addEventListener("click", ()=>{
+  document.getElementById("modal-overlay").classList.remove("show");
+  if(!pendingChoice) return;
+  const decisionMs = performance.now() - session.decisionStart;
+  const record = {
+    student_id: session.student_id,
+    name: session.name,
+    first_click_item: session.firstClick ? session.firstClick.item : pendingChoice.name,
+    first_click_corner: session.firstClick ? session.firstClick.corner : session.currentCorner,
+    decision_time_sec: Math.round((decisionMs/1000)*100)/100,
+    exploration_count: session.explorationCount,
+    final_item: pendingChoice.name,
+    final_category: pendingChoice.category,
+    timestamp: new Date().toISOString()
+  };
+  saveRecord(record);
+  session.lastRecord = record;
+  pendingChoice = null;
+
+  document.getElementById("sum-item").textContent = record.final_item;
+  document.getElementById("sum-time").textContent = record.decision_time_sec + "초";
+  document.getElementById("sum-explore").textContent = record.exploration_count + "회";
+  showScene("scene-5");
+});
+
+/* ======================================================================
+   SCENE 5 — 완료 / 재시작
+   ====================================================================== */
+document.getElementById("btn-restart").addEventListener("click", ()=>{
+  inSid.value = ""; inName.value = "";
+  session = { student_id:"", name:"" };
+  showScene("scene-1");
+});
+
+let session = { student_id:"", name:"" };
+
+/* ======================================================================
+   DASHBOARD
+   ====================================================================== */
+let charts = {};
+function renderDashboard(){
+  const data = loadData();
+  const total = data.length;
+  document.getElementById("kpi-total").innerHTML = total + "<small> 명</small>";
+  document.getElementById("table-count").textContent = total + "건";
+
+  const avgTime = total ? (data.reduce((s,d)=>s+d.decision_time_sec,0) / total) : 0;
+  document.getElementById("kpi-avgtime").innerHTML = avgTime.toFixed(1) + "<small> 초</small>";
+
+  // Top salience item
+  const counts = {};
+  data.forEach(d=>{ counts[d.first_click_item] = (counts[d.first_click_item]||0) + 1; });
+  const topEntry = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+  document.getElementById("kpi-topitem").textContent = topEntry ? `${topEntry[0]} (${topEntry[1]}건)` : "-";
+
+  document.getElementById("empty-state").style.display = total ? "none" : "block";
+  document.querySelector(".table-wrap").style.display = total ? "block" : "none";
+
+  // Table
+  const tbody = document.getElementById("table-body");
+  tbody.innerHTML = data.slice().reverse().map(d=>`
+    <tr>
+      <td>${escapeHtml(d.student_id)}</td>
+      <td>${escapeHtml(d.name)}</td>
+      <td>${escapeHtml(d.first_click_item)} (${d.first_click_corner}구역)</td>
+      <td>${escapeHtml(d.final_item)} <span class="tag ${d.final_category}">${d.final_category==='healthy'?'건강':'불량'}</span></td>
+      <td class="mono">${d.decision_time_sec.toFixed(2)}</td>
+      <td class="mono">${d.exploration_count}</td>
+      <td>${new Date(d.timestamp).toLocaleString('ko-KR')}</td>
+    </tr>
+  `).join("");
+
+  drawCharts(data, counts);
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+const PALETTE = ["#1B3B6F","#4FA3E3","#2E9E6D","#D97A3D","#8B5FBF","#C4432B","#2F6FB8","#6BA9D6"];
+
+function drawCharts(data, salienceCounts){
+  Object.values(charts).forEach(c=>c && c.destroy());
+
+  // Chart 1: salience pie
+  const sLabels = Object.keys(salienceCounts);
+  const sValues = Object.values(salienceCounts);
+  charts.salience = new Chart(document.getElementById("chart-salience"), {
+    type: "pie",
+    data: { labels: sLabels.length?sLabels:["데이터 없음"], datasets:[{ data: sValues.length?sValues:[1], backgroundColor: PALETTE, borderWidth:2, borderColor:"#fff" }] },
+    options: { plugins:{ legend:{ position:"bottom", labels:{ boxWidth:9, font:{size:10} } } }, maintainAspectRatio:false }
+  });
+
+  // Chart 2: speed bar (System 1 vs 2)
+  let fast = 0, slow = 0;
+  data.forEach(d=> d.decision_time_sec < 4 ? fast++ : slow++);
+  charts.speed = new Chart(document.getElementById("chart-speed"), {
+    type: "bar",
+    data: {
+      labels: ["1~3초\n(직관적 선택)", "4초 이상\n(숙고 선택)"],
+      datasets: [{ data:[fast, slow], backgroundColor:["#4FA3E3","#1B3B6F"], borderRadius:8, maxBarThickness:56 }]
+    },
+    options: {
+      plugins:{ legend:{display:false} },
+      scales:{ y:{ beginAtZero:true, ticks:{ precision:0, font:{size:10} } }, x:{ ticks:{ font:{size:10} } } },
+      maintainAspectRatio:false
+    }
+  });
+
+  // Chart 3: category donut
+  let healthy = 0, unhealthy = 0;
+  data.forEach(d=> d.final_category === "healthy" ? healthy++ : unhealthy++);
+  charts.category = new Chart(document.getElementById("chart-category"), {
+    type: "doughnut",
+    data: { labels:["건강 간식","불량식품"], datasets:[{ data:[healthy||0, unhealthy||0], backgroundColor:["#2E9E6D","#D97A3D"], borderWidth:2, borderColor:"#fff" }] },
+    options: { plugins:{ legend:{ position:"bottom", labels:{ boxWidth:9, font:{size:10} } } }, cutout:"62%", maintainAspectRatio:false }
+  });
+}
+
+document.getElementById("btn-export-csv").addEventListener("click", ()=>{
+  const data = loadData();
+  if(!data.length){ alert("다운로드할 데이터가 없습니다."); return; }
+  const headers = ["student_id","name","first_click_item","first_click_corner","decision_time_sec","exploration_count","final_item","final_category","timestamp"];
+  const rows = data.map(d=> headers.map(h=> `"${String(d[h]).replace(/"/g,'""')}"`).join(","));
+  const csv = "\uFEFF" + headers.join(",") + "\n" + rows.join("\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `nudge_study_data_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+});
+document.getElementById("btn-reset-data").addEventListener("click", ()=>{
+  if(confirm("저장된 모든 참가자 데이터를 삭제할까요? 이 작업은 되돌릴 수 없습니다.")){
+    localStorage.removeItem(STORAGE_KEY);
+    renderDashboard();
+  }
+});
+document.getElementById("btn-back-sim").addEventListener("click", (e)=>{
+  e.preventDefault();
+  location.hash = "";
+  showScene("scene-1");
+});
+
+/* ======================================================================
+   해시 라우팅 — #admin 진입 시 대시보드
+   ====================================================================== */
+function route(){
+  if(location.hash === "#admin"){
+    showScene("scene-admin");
+    renderDashboard();
+  }
+}
+window.addEventListener("hashchange", route);
+route();
+
+})();
+</script>
+</body>
+</html>
