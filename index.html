@@ -186,6 +186,11 @@ p.lead{font-size:14.5px; line-height:1.65; color:#4A5A73; margin:0 0 22px;}
   background:rgba(15,37,69,.85); color:#fff; font-size:10.5px; font-weight:700;
   padding:3px 8px; border-radius:8px; pointer-events:none;
 }
+.calib-marker .del-btn{
+  position:absolute; top:-8px; right:-8px; width:18px; height:18px; border-radius:50%;
+  background:#C4432B; color:#fff; font-size:11px; font-weight:800; line-height:16px;
+  text-align:center; border:2px solid #fff; cursor:pointer; z-index:10;
+}
 
 .explore-counter{
   position:absolute; top:12px; right:12px; z-index:8; background:rgba(15,37,69,.55); color:#fff;
@@ -552,12 +557,14 @@ td.mono, th.mono{font-family:'IBM Plex Mono',monospace;}
     <div style="padding:0 18px 24px;">
       <div class="card" style="max-width:100%; padding:18px;">
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+          <button class="btn secondary" id="btn-calib-add" style="width:auto; padding:10px 16px; background:var(--sky-100); border-color:var(--sky-500);">➕ 핫스팟 추가</button>
           <button class="btn secondary" id="btn-calib-export" style="width:auto; padding:10px 16px;">📋 코드 내보내기</button>
           <button class="btn secondary" id="btn-calib-reset" style="width:auto; padding:10px 16px;">↺ 원래대로</button>
         </div>
         <p style="font-size:12px; color:#8593AB; margin:0 0 10px; line-height:1.6;">
-          동그라미를 드래그해서 실제 상품 위치로 옮긴 뒤 <b>"코드 내보내기"</b>를 누르면 아래에 코드가 나타나요.
-          그 코드를 전체 복사해서 챗에 붙여넣어 주시면 실제 파일에 반영해드릴게요.
+          동그라미를 <b>드래그</b>하면 위치가 옮겨지고, <b>탭(짧게 누르기)</b>하면 이름을 수정할 수 있어요.
+          "➕ 핫스팟 추가"로 새 상품 지점을 만들고, 동그라미 위 <b>×</b> 버튼으로 삭제할 수 있어요.
+          다 마치면 <b>"코드 내보내기"</b>를 눌러 나온 코드를 전체 복사해서 챗에 붙여넣어 주세요.
         </p>
         <textarea id="calib-export-box" readonly style="display:none; width:100%; height:220px; font-family:'IBM Plex Mono',monospace; font-size:11px; padding:12px; border-radius:10px; border:1.5px solid var(--line); background:#F8FAFD; color:var(--ink);"></textarea>
       </div>
@@ -1140,6 +1147,7 @@ function initCalibrate(){
   renderCalibCorner();
 
   document.getElementById("btn-calib-export").onclick = exportCalibCode;
+  document.getElementById("btn-calib-add").onclick = addNewHotspot;
   document.getElementById("btn-calib-reset").onclick = ()=>{
     if(confirm("모든 좌표를 원래 값으로 되돌릴까요?")){
       calibData = cloneHotspots();
@@ -1159,14 +1167,38 @@ function renderCalibCorner(){
   // 기존 마커 제거 후 다시 그리기
   track.querySelectorAll(".calib-marker").forEach(m=>m.remove());
   const hotspots = calibData[calibCorner];
-  hotspots.forEach(h=>{
-    const marker = document.createElement("div");
-    marker.className = "calib-marker";
-    marker.innerHTML = `<span class="chip-label">${h.name}</span>`;
-    track.appendChild(marker);
-    positionMarker(marker, h, track);
-    makeMarkerDraggable(marker, h, track);
+  hotspots.forEach(h=> renderOneMarker(h, track));
+}
+
+function renderOneMarker(h, track){
+  const marker = document.createElement("div");
+  marker.className = "calib-marker";
+  marker.innerHTML = `<span class="chip-label">${escapeHtml(h.name)}</span><span class="del-btn">×</span>`;
+  track.appendChild(marker);
+  positionMarker(marker, h, track);
+  makeMarkerDraggable(marker, h, track);
+
+  marker.querySelector(".del-btn").addEventListener("click", (e)=>{
+    e.stopPropagation();
+    if(confirm(`"${h.name}" 핫스팟을 삭제할까요?`)){
+      const arr = calibData[calibCorner];
+      const idx = arr.indexOf(h);
+      if(idx > -1) arr.splice(idx, 1);
+      marker.remove();
+    }
   });
+}
+
+function addNewHotspot(){
+  const name = prompt("새 핫스팟의 상품명을 입력하세요:", "");
+  if(!name || !name.trim()) return;
+  const h = {
+    id: `custom_${Date.now()}`,
+    name: name.trim(),
+    x: 50, y: 50, r: 9
+  };
+  calibData[calibCorner].push(h);
+  renderOneMarker(h, document.getElementById("track-calib"));
 }
 
 function positionMarker(marker, h, track){
@@ -1180,6 +1212,7 @@ function positionMarker(marker, h, track){
 
 function makeMarkerDraggable(marker, h, track){
   let dragging = false;
+  let startClientX = 0, startClientY = 0, moved = false;
   function toXY(clientX, clientY){
     const rect = track.getBoundingClientRect();
     const stageH = document.getElementById("stage-calib").clientHeight;
@@ -1188,18 +1221,34 @@ function makeMarkerDraggable(marker, h, track){
     return {x,y};
   }
   function start(e){
+    if(e.target.classList.contains("del-btn")) return;
     e.stopPropagation();
+    const p = e.touches ? e.touches[0] : e;
+    startClientX = p.clientX; startClientY = p.clientY; moved = false;
     dragging = true;
     marker.style.cursor = "grabbing";
   }
   function move(e){
     if(!dragging) return;
     const p = e.touches ? e.touches[0] : e;
+    if(Math.abs(p.clientX-startClientX) > 4 || Math.abs(p.clientY-startClientY) > 4) moved = true;
     const {x,y} = toXY(p.clientX, p.clientY);
     h.x = Math.round(x*10)/10; h.y = Math.round(y*10)/10;
     positionMarker(marker, h, track);
   }
-  function end(){ dragging = false; marker.style.cursor = "grab"; }
+  function end(){
+    if(!dragging) return;
+    dragging = false;
+    marker.style.cursor = "grab";
+    if(!moved){
+      // 드래그 없이 탭만 한 경우 → 이름 수정
+      const newName = prompt("상품명을 수정하세요:", h.name);
+      if(newName && newName.trim()){
+        h.name = newName.trim();
+        marker.querySelector(".chip-label").textContent = h.name;
+      }
+    }
+  }
   marker.addEventListener("mousedown", start);
   window.addEventListener("mousemove", move);
   window.addEventListener("mouseup", end);
