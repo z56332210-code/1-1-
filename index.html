@@ -143,6 +143,22 @@ p.lead{font-size:14.5px; line-height:1.65; color:#4A5A73; margin:0 0 22px;}
 }
 .pano-arrow:hover{background:#fff; transform:translateY(-50%) scale(1.06);}
 .pano-arrow.l{left:12px;} .pano-arrow.r{right:12px;}
+/* Scene 4(매점)는 화살표가 간식 선택과 혼동되어 스와이프 전용으로 전환 — 화살표는 숨김 */
+#stage-store .pano-arrow{display:none;}
+.swipe-cue{
+  position:absolute; z-index:8; top:50%; transform:translateY(-50%);
+  width:34px; height:34px; border-radius:50%; background:rgba(15,37,69,.35);
+  display:flex; align-items:center; justify-content:center; color:#fff; font-size:16px;
+  animation:swipeCue 1.6s ease-in-out infinite; pointer-events:none;
+}
+.swipe-cue.l{left:10px;} .swipe-cue.r{right:10px;}
+@keyframes swipeCue{
+  0%,100%{opacity:.35; transform:translateY(-50%) translateX(0);}
+  50%{opacity:.9;}
+}
+.swipe-cue.l{animation-name:swipeCueL;} .swipe-cue.r{animation-name:swipeCueR;}
+@keyframes swipeCueL{0%,100%{opacity:.35; transform:translateY(-50%) translateX(0);} 50%{opacity:.9; transform:translateY(-50%) translateX(-6px);}}
+@keyframes swipeCueR{0%,100%{opacity:.35; transform:translateY(-50%) translateX(0);} 50%{opacity:.9; transform:translateY(-50%) translateX(6px);}}
 .pano-swipehint{
   position:absolute; bottom:12px; left:50%; transform:translateX(-50%); z-index:8;
   font-size:11.5px; color:rgba(255,255,255,.85); background:rgba(15,37,69,.55);
@@ -339,7 +355,8 @@ td.mono, th.mono{font-family:'IBM Plex Mono',monospace;}
     <div class="pano-stage" id="stage-practice">
       <!-- practice_pano.jpg : 연습용 360도(등각투영) 파노라마 -->
       <div class="pano-track" id="track-practice">
-        <img src="./assets/practice_pano.jpg" draggable="false" alt="연습용 파노라마">
+        <img src="./assets/practice_pano.jpg" draggable="false" alt="연습용 파노라마"
+             onerror="this.parentElement.parentElement.insertAdjacentHTML('beforeend','<div style=\'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;text-align:center;padding:20px;\'>이미지를 찾을 수 없어요.<br>assets/practice_pano.jpg 경로를 확인하세요.</div>')">
       </div>
       <div class="pano-fade left"></div>
       <div class="pano-fade right"></div>
@@ -381,7 +398,8 @@ td.mono, th.mono{font-family:'IBM Plex Mono',monospace;}
     <div class="pano-stage" id="stage-store">
       <!-- store_corner1~4.jpg : 매점 사방 모퉁이 스틸컷 4장, 순환 회전 -->
       <div class="pano-track" id="track-store">
-        <img src="./assets/store_corner1.jpg" draggable="false" alt="매점 모퉁이">
+        <img src="./assets/store_corner1.jpg" draggable="false" alt="매점 모퉁이"
+             onerror="this.insertAdjacentHTML('afterend','<div class=\'pano-loaderr\' style=\'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;text-align:center;padding:20px;\'>이미지를 찾을 수 없어요.<br>'+this.getAttribute('src')+' 경로를 확인하세요.</div>')">
       </div>
       <div class="pano-fade left"></div>
       <div class="pano-fade right"></div>
@@ -391,7 +409,9 @@ td.mono, th.mono{font-family:'IBM Plex Mono',monospace;}
       <div class="explore-counter">회전 <b id="explore-count">0</b>회</div>
       <button class="pano-arrow l" id="arrow-store-l">‹</button>
       <button class="pano-arrow r" id="arrow-store-r">›</button>
-      <div class="pano-swipehint" id="hint-store">← 구역 전환 · 드래그로 둘러보기 →</div>
+      <div class="swipe-cue l">‹</div>
+      <div class="swipe-cue r">›</div>
+      <div class="pano-swipehint" id="hint-store">좌우로 스와이프해서 매점 둘러보기</div>
     </div>
   </section>
 
@@ -462,8 +482,8 @@ td.mono, th.mono{font-family:'IBM Plex Mono',monospace;}
             <div class="chart-box"><canvas id="chart-speed"></canvas></div>
           </div>
           <div class="chart-card">
-            <h3>최종 선택 비율</h3>
-            <p class="desc">건강 간식 vs 불량식품</p>
+            <h3>탐색 행동 분포</h3>
+            <p class="desc">간식 선택 전 구역 전환 횟수</p>
             <div class="chart-box"><canvas id="chart-category"></canvas></div>
           </div>
         </div>
@@ -514,9 +534,17 @@ td.mono, th.mono{font-family:'IBM Plex Mono',monospace;}
 "use strict";
 
 /* ======================================================================
-   데이터 저장 스키마 (localStorage key: nudge_study_participants)
-   [{ student_id, name, first_click_item, first_click_corner, decision_time_sec,
-      exploration_count, final_item, final_category, timestamp }]
+   데이터 저장 스키마
+
+   1) localStorage(nudge_study_participants) — #admin 로컬 대시보드용, 행동 데이터만:
+      [{ student_id, name, first_click_item, first_click_corner, decision_time_sec,
+         exploration_count, final_item, timestamp }]
+      → 등급/가격/카테고리는 여기 절대 포함되지 않음 (GitHub Pages에 공개되므로).
+
+   2) 구글시트 웹훅 payload — 연구자 전용, 위 필드 + 등급/가격/카테고리 포함:
+      { ...위 필드, final_category, final_price_krw, core_nutrition_grade,
+        processing_grade, positive_nutrient_grade, total_grade }
+      → sendToGoogleSheet()로만 전송, 화면에는 절대 렌더링하지 않음.
    ====================================================================== */
 const STORAGE_KEY = "nudge_study_participants";
 
@@ -532,32 +560,94 @@ function saveRecord(rec){
 
 /* ======================================================================
    핫스팟 정의 — 각 사진 위 %좌표 기준. 실제 촬영 이미지 내용에 맞춰 배치.
-   category: 'healthy' | 'unhealthy'  (Scene 5 통계용 대분류)
+   category: school_store_products.csv 의 category 값 그대로 (등급 조회는 PRODUCT_GRADES 참조)
+
+   ⚠️ 중요: 이 상품명/좌표는 학생 화면(Scene 1~5)에서 "이름"만 노출됩니다.
+   등급(core_nutrition_grade 등)은 절대 학생 화면에 렌더링하지 마세요 — 대시보드(#admin)와
+   구글시트에서만 조회 가능해야 합니다. (아래 PRODUCT_GRADES / 모달 / summary 렌더링 참조)
    ====================================================================== */
 const PRACTICE_HOTSPOT = { id:"white_pot", name:"흰색 화분", x:91, y:60, r:11 };
 
 const CORNER_HOTSPOTS = {
   1: [
-    { id:"c1_candy", name:"하리보 젤리 & 사탕", x:30, y:55, r:11, category:"unhealthy" },
-    { id:"c1_icecream", name:"아이스크림 냉동고", x:62, y:66, r:10, category:"unhealthy" },
-    { id:"c1_chips", name:"과자류 진열대", x:83, y:48, r:10, category:"unhealthy" },
+    { id:"c1_1", name:"새우깡", x:30, y:55, r:11 },
+    { id:"c1_2", name:"메로나", x:62, y:66, r:10 },
+    { id:"c1_3", name:"포스틱", x:83, y:48, r:10 },
   ],
   2: [
-    { id:"c2_water", name:"생수 · 음료 냉장고", x:9,  y:55, r:10, category:"healthy" },
-    { id:"c2_frozen", name:"냉동 간식 코너", x:48, y:62, r:11, category:"unhealthy" },
-    { id:"c2_chips", name:"과자 진열대", x:73, y:48, r:11, category:"unhealthy" },
+    { id:"c2_1", name:"생수", x:9,  y:55, r:10 },
+    { id:"c2_2", name:"죠스바", x:48, y:62, r:11 },
+    { id:"c2_3", name:"도리토스", x:73, y:48, r:11 },
   ],
   3: [
-    { id:"c3_drink", name:"음료수 냉장고", x:8,  y:55, r:10, category:"healthy" },
-    { id:"c3_chips", name:"과자류 선반", x:47, y:44, r:11, category:"unhealthy" },
-    { id:"c3_counter", name:"계산대 앞 간식", x:90, y:56, r:9,  category:"unhealthy" },
+    { id:"c3_1", name:"포카리스웨트", x:8,  y:55, r:10 },
+    { id:"c3_2", name:"꼬깔콘", x:47, y:44, r:11 },
+    { id:"c3_3", name:"초코파이", x:90, y:56, r:9 },
   ],
   4: [
-    { id:"c4_dairy", name:"유제품 · 음료 냉장고", x:4,  y:55, r:9,  category:"healthy" },
-    { id:"c4_chips", name:"과자류 진열대", x:23, y:44, r:11, category:"unhealthy" },
-    { id:"c4_drink", name:"음료 냉장고", x:94, y:50, r:8,  category:"healthy" },
+    { id:"c4_1", name:"서울우유(흰우유)", x:4,  y:55, r:9 },
+    { id:"c4_2", name:"오레오", x:23, y:44, r:11 },
+    { id:"c4_3", name:"펩시", x:94, y:50, r:8 },
   ],
 };
+
+/* ======================================================================
+   상품 등급 데이터셋 (school_store_products.csv 전체 임베드)
+   researcher-only: 학생 화면에서는 절대 참조/렌더링하지 않음
+   ====================================================================== */
+const PRODUCT_GRADES = {
+  "새우깡":{category:"과자/스낵",price_krw:1800,core_nutrition_grade:"C",processing_grade:"C",positive_nutrient_grade:"D",total_grade:"C"},
+  "꼬깔콘":{category:"과자/스낵",price_krw:1800,core_nutrition_grade:"C",processing_grade:"C",positive_nutrient_grade:"D",total_grade:"C"},
+  "감자깡":{category:"과자/스낵",price_krw:1800,core_nutrition_grade:"C",processing_grade:"C",positive_nutrient_grade:"D",total_grade:"C"},
+  "자갈치":{category:"과자/스낵",price_krw:1800,core_nutrition_grade:"C",processing_grade:"C",positive_nutrient_grade:"D",total_grade:"C"},
+  "꽃게랑(불짬뽕맛)":{category:"과자/스낵",price_krw:1800,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "도리토스":{category:"과자/스낵",price_krw:1800,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "눈을감자":{category:"과자/스낵",price_krw:2000,core_nutrition_grade:"C",processing_grade:"C",positive_nutrient_grade:"D",total_grade:"C"},
+  "포스틱":{category:"과자/스낵",price_krw:1900,core_nutrition_grade:"B",processing_grade:"C",positive_nutrient_grade:"C",total_grade:"B"},
+  "프링글스":{category:"과자/스낵",price_krw:6000,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "나쵸":{category:"과자/스낵",price_krw:1800,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "츄러스팝":{category:"과자/스낵",price_krw:1800,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "콘칩(군옥수수맛)":{category:"과자/스낵",price_krw:1800,core_nutrition_grade:"C",processing_grade:"C",positive_nutrient_grade:"D",total_grade:"C"},
+  "뿌셔뿌셔":{category:"과자/스낵",price_krw:1500,core_nutrition_grade:"C",processing_grade:"C",positive_nutrient_grade:"D",total_grade:"C"},
+  "Sesame Cracker":{category:"과자/스낵",price_krw:1600,core_nutrition_grade:"B",processing_grade:"B",positive_nutrient_grade:"B",total_grade:"B"},
+  "Egg Cookie":{category:"과자/스낵",price_krw:1600,core_nutrition_grade:"B",processing_grade:"B",positive_nutrient_grade:"B",total_grade:"B"},
+  "오레오":{category:"초콜릿/쿠키/비스킷",price_krw:2000,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "초코파이":{category:"초콜릿/쿠키/비스킷",price_krw:6000,core_nutrition_grade:"C",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"C"},
+  "초코칩쿠키":{category:"초콜릿/쿠키/비스킷",price_krw:1700,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "예감":{category:"초콜릿/쿠키/비스킷",price_krw:1800,core_nutrition_grade:"B",processing_grade:"C",positive_nutrient_grade:"C",total_grade:"B"},
+  "프레츠":{category:"초콜릿/쿠키/비스킷",price_krw:1800,core_nutrition_grade:"B",processing_grade:"C",positive_nutrient_grade:"C",total_grade:"B"},
+  "Milka":{category:"초콜릿/쿠키/비스킷",price_krw:1400,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "스니커즈":{category:"초콜릿/쿠키/비스킷",price_krw:1500,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"C",total_grade:"D"},
+  "Smile 초콜릿비스킷":{category:"초콜릿/쿠키/비스킷",price_krw:1400,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "eclipse(민트)":{category:"초콜릿/쿠키/비스킷",price_krw:700,core_nutrition_grade:"B",processing_grade:"C",positive_nutrient_grade:"D",total_grade:"B"},
+  "츄파춥스":{category:"사탕/젤리/껌",price_krw:1000,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "트롤리젤리":{category:"사탕/젤리/껌",price_krw:1300,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "새콤달콤":{category:"사탕/젤리/껌",price_krw:1000,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "네모스낵":{category:"사탕/젤리/껌",price_krw:700,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "죠스바":{category:"아이스크림/빙과",price_krw:1500,core_nutrition_grade:"C",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"C"},
+  "스크류바":{category:"아이스크림/빙과",price_krw:1500,core_nutrition_grade:"C",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"C"},
+  "메로나":{category:"아이스크림/빙과",price_krw:1500,core_nutrition_grade:"C",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"C"},
+  "비비빅":{category:"아이스크림/빙과",price_krw:1500,core_nutrition_grade:"C",processing_grade:"C",positive_nutrient_grade:"C",total_grade:"C"},
+  "쿠키앤크림바":{category:"아이스크림/빙과",price_krw:2700,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "설레임":{category:"아이스크림/빙과",price_krw:2000,core_nutrition_grade:"C",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"C"},
+  "피카츄소시지빵":{category:"빵류",price_krw:2500,core_nutrition_grade:"C",processing_grade:"D",positive_nutrient_grade:"C",total_grade:"C"},
+  "갈릭소세지빵":{category:"빵류",price_krw:2500,core_nutrition_grade:"C",processing_grade:"D",positive_nutrient_grade:"C",total_grade:"C"},
+  "밀크카라멜빵":{category:"빵류",price_krw:2500,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "생수":{category:"음료",price_krw:1200,core_nutrition_grade:"A",processing_grade:"A",positive_nutrient_grade:"C",total_grade:"A"},
+  "포카리스웨트":{category:"음료",price_krw:2000,core_nutrition_grade:"B",processing_grade:"C",positive_nutrient_grade:"C",total_grade:"B"},
+  "나랑드사이다제로":{category:"음료",price_krw:1200,core_nutrition_grade:"A",processing_grade:"C",positive_nutrient_grade:"D",total_grade:"B"},
+  "몬스터에너지":{category:"음료",price_krw:2000,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "펩시":{category:"음료",price_krw:1800,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "웰치스포도":{category:"음료",price_krw:2200,core_nutrition_grade:"D",processing_grade:"C",positive_nutrient_grade:"D",total_grade:"D"},
+  "피크닉(사과)":{category:"음료",price_krw:1000,core_nutrition_grade:"C",processing_grade:"C",positive_nutrient_grade:"C",total_grade:"C"},
+  "레쓰비":{category:"음료",price_krw:1200,core_nutrition_grade:"D",processing_grade:"D",positive_nutrient_grade:"D",total_grade:"D"},
+  "서울우유(흰우유)":{category:"유제품",price_krw:1500,core_nutrition_grade:"A",processing_grade:"A",positive_nutrient_grade:"A",total_grade:"A"},
+  "서울우유딸기맛":{category:"유제품",price_krw:1500,core_nutrition_grade:"B",processing_grade:"B",positive_nutrient_grade:"B",total_grade:"B"},
+  "Hershey's초코우유":{category:"유제품",price_krw:1500,core_nutrition_grade:"C",processing_grade:"C",positive_nutrient_grade:"B",total_grade:"B"},
+  "Vita500/VitaC":{category:"유제품",price_krw:1200,core_nutrition_grade:"B",processing_grade:"C",positive_nutrient_grade:"B",total_grade:"B"},
+};
+function gradeScore(g){ return {A:4,B:3,C:2,D:1}[g] || 0; }
+function gradeColor(g){ return {A:"#2E9E6D",B:"#8FCB6B",C:"#D97A3D",D:"#C4432B"}[g] || "#8593AB"; }
 
 /* ======================================================================
    Scene 전환
@@ -616,7 +706,7 @@ function makePanoViewer(stageEl, trackEl, arrowL, arrowR){
       const clickX = x - rect.left;
       const clickY = (e.changedTouches ? e.changedTouches[0].clientY : e.clientY) - rect.top;
       if(onTap) onTap(clickX, clickY);
-    } else if(velocity > 0.55 && Math.abs(dx) > 60 && onFling){
+    } else if(velocity > 0.35 && Math.abs(dx) > 45 && onFling){
       onFling(dx < 0 ? 1 : -1);
     }
   }
@@ -730,6 +820,8 @@ const storeViewer = makePanoViewer(
 );
 
 function updateCornerUI(){
+  const oldErr = stageStore.querySelector(".pano-loaderr");
+  if(oldErr) oldErr.remove();
   storeImg.src = `./assets/store_corner${session.currentCorner}.jpg`;
   cornerBadge.forEach((el,i)=> el.classList.toggle("on", i === session.currentCorner-1));
   exploreCountEl.textContent = session.explorationCount;
@@ -759,7 +851,8 @@ storeViewer.setTapHandler((x,y)=>{
     };
   }
   if(hit){
-    pendingChoice = { name: hit.name, category: hit.category };
+    // 학생 화면에는 상품 "이름"만 넘긴다 — 등급/가격은 여기서 절대 참조하지 않음
+    pendingChoice = { name: hit.name };
     document.getElementById("modal-item-name").textContent = hit.name;
     document.getElementById("modal-overlay").classList.add("show");
   }
@@ -774,6 +867,9 @@ document.getElementById("modal-confirm").addEventListener("click", ()=>{
   document.getElementById("modal-overlay").classList.remove("show");
   if(!pendingChoice) return;
   const decisionMs = performance.now() - session.decisionStart;
+
+  // 행동 데이터만 — 로컬(localStorage)에 저장되고 #admin 대시보드에 표시되는 부분.
+  // 등급/가격 등 연구자 전용 정보는 절대 포함하지 않는다.
   const record = {
     student_id: session.student_id,
     name: session.name,
@@ -782,11 +878,24 @@ document.getElementById("modal-confirm").addEventListener("click", ()=>{
     decision_time_sec: Math.round((decisionMs/1000)*100)/100,
     exploration_count: session.explorationCount,
     final_item: pendingChoice.name,
-    final_category: pendingChoice.category,
     timestamp: new Date().toISOString()
   };
   saveRecord(record);
   session.lastRecord = record;
+
+  // 연구자 전용 전체 데이터 — 등급/가격 포함, 화면에는 절대 렌더링하지 않고
+  // 구글시트 웹앱 URL로만 전송한다 (아래 GOOGLE_SHEET_WEBAPP_URL 설정 시 동작).
+  const grade = PRODUCT_GRADES[pendingChoice.name] || {};
+  sendToGoogleSheet({
+    ...record,
+    final_category: grade.category || "",
+    final_price_krw: grade.price_krw || "",
+    core_nutrition_grade: grade.core_nutrition_grade || "",
+    processing_grade: grade.processing_grade || "",
+    positive_nutrient_grade: grade.positive_nutrient_grade || "",
+    total_grade: grade.total_grade || ""
+  });
+
   pendingChoice = null;
 
   document.getElementById("sum-item").textContent = record.final_item;
@@ -794,6 +903,27 @@ document.getElementById("modal-confirm").addEventListener("click", ()=>{
   document.getElementById("sum-explore").textContent = record.exploration_count + "회";
   showScene("scene-5");
 });
+
+/* ======================================================================
+   구글시트 전송 — 등급/가격 등 연구자 전용 데이터는 오직 이 경로로만 흐른다.
+   화면(로컬 대시보드 포함)에는 절대 노출되지 않음.
+
+   사용법: Apps Script를 "웹 앱"으로 배포한 뒤 발급받은 URL을 아래에 붙여넣으세요.
+   비워두면(기본값) 전송을 건너뛰고 조용히 무시합니다 — 기존 로컬 기능은 그대로 동작.
+   ====================================================================== */
+const GOOGLE_SHEET_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzQ01RrhHIDM3xyCM0LZtp2NByNsixy_6f0VdktEeYMvzJ-rx2s3FmmPfRKjPhN39lUvA/exec";
+
+function sendToGoogleSheet(payload){
+  if(!GOOGLE_SHEET_WEBAPP_URL) return;
+  try{
+    fetch(GOOGLE_SHEET_WEBAPP_URL, {
+      method: "POST",
+      mode: "no-cors", // Apps Script 응답을 읽지 않으므로 CORS 프리플라이트를 피하기 위함
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    }).catch(()=>{ /* 네트워크 실패 시에도 학생 화면 흐름은 막지 않음 */ });
+  }catch(e){ /* no-op */ }
+}
 
 /* ======================================================================
    SCENE 5 — 완료 / 재시작
@@ -835,7 +965,7 @@ function renderDashboard(){
       <td>${escapeHtml(d.student_id)}</td>
       <td>${escapeHtml(d.name)}</td>
       <td>${escapeHtml(d.first_click_item)} (${d.first_click_corner}구역)</td>
-      <td>${escapeHtml(d.final_item)} <span class="tag ${d.final_category}">${d.final_category==='healthy'?'건강':'불량'}</span></td>
+      <td>${escapeHtml(d.final_item)}</td>
       <td class="mono">${d.decision_time_sec.toFixed(2)}</td>
       <td class="mono">${d.exploration_count}</td>
       <td>${new Date(d.timestamp).toLocaleString('ko-KR')}</td>
@@ -876,12 +1006,18 @@ function drawCharts(data, salienceCounts){
     }
   });
 
-  // Chart 3: category donut
-  let healthy = 0, unhealthy = 0;
-  data.forEach(d=> d.final_category === "healthy" ? healthy++ : unhealthy++);
+  // Chart 3: 탐색 횟수 분포 (행동 데이터만 — 상품 등급/카테고리 정보 없음)
+  const exploreBuckets = {"0회":0, "1회":0, "2회":0, "3회 이상":0};
+  data.forEach(d=>{
+    const c = d.exploration_count;
+    if(c<=0) exploreBuckets["0회"]++;
+    else if(c===1) exploreBuckets["1회"]++;
+    else if(c===2) exploreBuckets["2회"]++;
+    else exploreBuckets["3회 이상"]++;
+  });
   charts.category = new Chart(document.getElementById("chart-category"), {
     type: "doughnut",
-    data: { labels:["건강 간식","불량식품"], datasets:[{ data:[healthy||0, unhealthy||0], backgroundColor:["#2E9E6D","#D97A3D"], borderWidth:2, borderColor:"#fff" }] },
+    data: { labels:Object.keys(exploreBuckets), datasets:[{ data:Object.values(exploreBuckets), backgroundColor:PALETTE, borderWidth:2, borderColor:"#fff" }] },
     options: { plugins:{ legend:{ position:"bottom", labels:{ boxWidth:9, font:{size:10} } } }, cutout:"62%", maintainAspectRatio:false }
   });
 }
@@ -889,7 +1025,7 @@ function drawCharts(data, salienceCounts){
 document.getElementById("btn-export-csv").addEventListener("click", ()=>{
   const data = loadData();
   if(!data.length){ alert("다운로드할 데이터가 없습니다."); return; }
-  const headers = ["student_id","name","first_click_item","first_click_corner","decision_time_sec","exploration_count","final_item","final_category","timestamp"];
+  const headers = ["student_id","name","first_click_item","first_click_corner","decision_time_sec","exploration_count","final_item","timestamp"];
   const rows = data.map(d=> headers.map(h=> `"${String(d[h]).replace(/"/g,'""')}"`).join(","));
   const csv = "\uFEFF" + headers.join(",") + "\n" + rows.join("\n");
   const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
