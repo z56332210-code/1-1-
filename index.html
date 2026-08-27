@@ -173,6 +173,20 @@ p.lead{font-size:14.5px; line-height:1.65; color:#4A5A73; margin:0 0 22px;}
 }
 .corner-badge span.on{background:var(--sky-500); box-shadow:0 0 0 3px rgba(79,163,227,.35);}
 
+/* ============ Calibration markers ============ */
+.calib-marker{
+  position:absolute; width:28px; height:28px; margin:-14px 0 0 -14px; z-index:9;
+  border-radius:50%; background:rgba(217,122,61,.85); border:2px solid #fff;
+  display:flex; align-items:center; justify-content:center; cursor:grab;
+  box-shadow:0 2px 8px rgba(0,0,0,.35); touch-action:none;
+}
+.calib-marker:active{cursor:grabbing; background:var(--sky-500);}
+.calib-marker .chip-label{
+  position:absolute; top:32px; left:50%; transform:translateX(-50%); white-space:nowrap;
+  background:rgba(15,37,69,.85); color:#fff; font-size:10.5px; font-weight:700;
+  padding:3px 8px; border-radius:8px; pointer-events:none;
+}
+
 .explore-counter{
   position:absolute; top:12px; right:12px; z-index:8; background:rgba(15,37,69,.55); color:#fff;
   font-size:11px; padding:6px 10px; border-radius:20px; display:flex; align-items:center; gap:6px;
@@ -448,6 +462,7 @@ td.mono, th.mono{font-family:'IBM Plex Mono',monospace;}
             <div class="dash-sub">Nudge Study Analytics · 실시간 로컬 데이터 기준</div>
           </div>
           <div class="dash-actions">
+            <a class="chip-btn" href="#calibrate" style="text-decoration:none; display:flex; align-items:center;">📍 핫스팟 좌표 보정</a>
             <button class="chip-btn" id="btn-export-csv">⇩ CSV 다운로드</button>
             <button class="chip-btn" id="btn-reset-data">데이터 초기화</button>
             <a class="chip-btn" href="#" id="btn-back-sim" style="text-decoration:none; display:flex; align-items:center;">체험 화면으로</a>
@@ -510,6 +525,41 @@ td.mono, th.mono{font-family:'IBM Plex Mono',monospace;}
             <p>체험 화면에서 피험자가 시뮬레이션을 완료하면 이곳에 자동으로 집계됩니다.</p>
           </div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CALIBRATE : 핫스팟 좌표 보정 도구 (연구자 전용) ============ -->
+  <section class="scene" id="scene-calibrate">
+    <div class="topbar">
+      <div class="brand"><span class="dot"></span>핫스팟 좌표 보정</div>
+      <a href="#admin" class="admin-link" style="margin:0; font-size:12px;">← 대시보드로</a>
+    </div>
+    <div class="viewer-header">
+      <div class="mission" style="background:var(--warn);">
+        🎯 동그라미를 실제 상품 위치로 드래그하세요 · 스와이프로 구역 전환
+      </div>
+    </div>
+    <div class="pano-stage" id="stage-calib" style="margin-bottom:8px;">
+      <div class="pano-track" id="track-calib">
+        <img src="./assets/store_corner1.jpg" draggable="false" alt="보정용 매점 사진">
+      </div>
+      <div class="corner-badge" id="calib-corner-badge">
+        <span class="on"></span><span></span><span></span><span></span>
+      </div>
+      <div class="pano-swipehint">← 스와이프로 구역 전환 →</div>
+    </div>
+    <div style="padding:0 18px 24px;">
+      <div class="card" style="max-width:100%; padding:18px;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+          <button class="btn secondary" id="btn-calib-export" style="width:auto; padding:10px 16px;">📋 코드 내보내기</button>
+          <button class="btn secondary" id="btn-calib-reset" style="width:auto; padding:10px 16px;">↺ 원래대로</button>
+        </div>
+        <p style="font-size:12px; color:#8593AB; margin:0 0 10px; line-height:1.6;">
+          동그라미를 드래그해서 실제 상품 위치로 옮긴 뒤 <b>"코드 내보내기"</b>를 누르면 아래에 코드가 나타나요.
+          그 코드를 전체 복사해서 챗에 붙여넣어 주시면 실제 파일에 반영해드릴게요.
+        </p>
+        <textarea id="calib-export-box" readonly style="display:none; width:100%; height:220px; font-family:'IBM Plex Mono',monospace; font-size:11px; padding:12px; border-radius:10px; border:1.5px solid var(--line); background:#F8FAFD; color:var(--ink);"></textarea>
       </div>
     </div>
   </section>
@@ -736,13 +786,14 @@ function makePanoViewer(stageEl, trackEl, arrowL, arrowR){
 }
 
 function nearestHotspot(hotspots, xPct, yPct){
+  // 반경 안에 있는 후보들 중에서만 가장 가까운 것을 찾는다.
+  // (반경 밖의 "가장 가까운" 핫스팟 때문에 엉뚱한 이름이 매칭되는 버그 수정)
   let best = null, bestDist = Infinity;
   hotspots.forEach(h=>{
     const d = Math.hypot(h.x - xPct, h.y - yPct);
-    if(d < bestDist){ bestDist = d; best = h; }
+    if(d <= h.r && d < bestDist){ bestDist = d; best = h; }
   });
-  if(best && bestDist <= best.r) return best;
-  return null;
+  return best;
 }
 
 function spawnReticle(stageEl, x, y){
@@ -1047,12 +1098,139 @@ document.getElementById("btn-back-sim").addEventListener("click", (e)=>{
 });
 
 /* ======================================================================
-   해시 라우팅 — #admin 진입 시 대시보드
+   CALIBRATE — 핫스팟 좌표 보정 도구 (연구자 전용)
+   드래그로 마커를 옮기면 calibData에 반영되고, "코드 내보내기"로
+   CORNER_HOTSPOTS 전체를 새 좌표로 재구성한 JS 코드를 만들어준다.
+   ====================================================================== */
+let calibData = null; // { 1:[{...}], 2:[...], 3:[...], 4:[...] } — 딥카피본
+let calibCorner = 1;
+let calibViewer = null;
+let calibInited = false;
+
+function cloneHotspots(){
+  const out = {};
+  Object.keys(CORNER_HOTSPOTS).forEach(k=>{
+    out[k] = CORNER_HOTSPOTS[k].map(h=>({...h}));
+  });
+  return out;
+}
+
+function initCalibrate(){
+  if(!calibData) calibData = cloneHotspots();
+  if(!calibInited){
+    const stage = document.getElementById("stage-calib");
+    const track = document.getElementById("track-calib");
+    calibViewer = makePanoViewer(
+      stage, track,
+      // 화살표 버튼 없이 스와이프만 쓰므로 더미 엘리먼트로 대체
+      document.createElement("button"), document.createElement("button")
+    );
+    calibViewer.setFlingHandler((dir)=>{
+      calibCorner = ((calibCorner - 1 + dir + 4) % 4) + 1;
+      calibViewer.reset();
+      renderCalibCorner();
+    });
+    calibInited = true;
+  }
+  calibCorner = 1;
+  calibViewer.reset();
+  renderCalibCorner();
+
+  document.getElementById("btn-calib-export").onclick = exportCalibCode;
+  document.getElementById("btn-calib-reset").onclick = ()=>{
+    if(confirm("모든 좌표를 원래 값으로 되돌릴까요?")){
+      calibData = cloneHotspots();
+      renderCalibCorner();
+      document.getElementById("calib-export-box").style.display = "none";
+    }
+  };
+}
+
+function renderCalibCorner(){
+  const track = document.getElementById("track-calib");
+  const img = track.querySelector("img");
+  img.src = `./assets/store_corner${calibCorner}.jpg`;
+  document.querySelectorAll("#calib-corner-badge span").forEach((el,i)=>
+    el.classList.toggle("on", i === calibCorner-1)
+  );
+  // 기존 마커 제거 후 다시 그리기
+  track.querySelectorAll(".calib-marker").forEach(m=>m.remove());
+  const hotspots = calibData[calibCorner];
+  hotspots.forEach(h=>{
+    const marker = document.createElement("div");
+    marker.className = "calib-marker";
+    marker.innerHTML = `<span class="chip-label">${h.name}</span>`;
+    track.appendChild(marker);
+    positionMarker(marker, h, track);
+    makeMarkerDraggable(marker, h, track);
+  });
+}
+
+function positionMarker(marker, h, track){
+  // track(이미지) 폭 기준 절대 px 위치로 배치 — pano-track 자체가 transform으로 밀리므로
+  // 마커는 track의 자식으로 두면 이미지와 함께 이동/스케일된다.
+  const rect = track.getBoundingClientRect();
+  const stageH = document.getElementById("stage-calib").clientHeight;
+  marker.style.left = (h.x/100 * rect.width) + "px";
+  marker.style.top = (h.y/100 * stageH) + "px";
+}
+
+function makeMarkerDraggable(marker, h, track){
+  let dragging = false;
+  function toXY(clientX, clientY){
+    const rect = track.getBoundingClientRect();
+    const stageH = document.getElementById("stage-calib").clientHeight;
+    const x = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((clientY - rect.top) / stageH) * 100));
+    return {x,y};
+  }
+  function start(e){
+    e.stopPropagation();
+    dragging = true;
+    marker.style.cursor = "grabbing";
+  }
+  function move(e){
+    if(!dragging) return;
+    const p = e.touches ? e.touches[0] : e;
+    const {x,y} = toXY(p.clientX, p.clientY);
+    h.x = Math.round(x*10)/10; h.y = Math.round(y*10)/10;
+    positionMarker(marker, h, track);
+  }
+  function end(){ dragging = false; marker.style.cursor = "grab"; }
+  marker.addEventListener("mousedown", start);
+  window.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", end);
+  marker.addEventListener("touchstart", start, {passive:true});
+  window.addEventListener("touchmove", move, {passive:true});
+  window.addEventListener("touchend", end);
+}
+
+function exportCalibCode(){
+  let out = "const CORNER_HOTSPOTS = {\n";
+  [1,2,3,4].forEach(c=>{
+    out += `  ${c}: [\n`;
+    calibData[c].forEach(h=>{
+      out += `    { id:"${h.id}", name:"${h.name}", x:${h.x}, y:${h.y}, r:${h.r} },\n`;
+    });
+    out += `  ],\n`;
+  });
+  out += "};";
+  const box = document.getElementById("calib-export-box");
+  box.style.display = "block";
+  box.value = out;
+  box.focus(); box.select();
+}
+
+/* ======================================================================
+   해시 라우팅 — #admin, #calibrate 진입 시 각각의 화면으로 전환
    ====================================================================== */
 function route(){
   if(location.hash === "#admin"){
     showScene("scene-admin");
     renderDashboard();
+  } else if(location.hash === "#calibrate"){
+    showScene("scene-calibrate");
+    initCalibrate();
   }
 }
 window.addEventListener("hashchange", route);
