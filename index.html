@@ -1160,14 +1160,25 @@ function initCalibrate(){
 function renderCalibCorner(){
   const track = document.getElementById("track-calib");
   const img = track.querySelector("img");
-  img.src = `./assets/store_corner${calibCorner}.jpg`;
   document.querySelectorAll("#calib-corner-badge span").forEach((el,i)=>
     el.classList.toggle("on", i === calibCorner-1)
   );
-  // 기존 마커 제거 후 다시 그리기
+  // 기존 마커 제거
   track.querySelectorAll(".calib-marker").forEach(m=>m.remove());
   const hotspots = calibData[calibCorner];
-  hotspots.forEach(h=> renderOneMarker(h, track));
+
+  function draw(){
+    hotspots.forEach(h=> renderOneMarker(h, track));
+  }
+
+  const newSrc = `./assets/store_corner${calibCorner}.jpg`;
+  if(img.getAttribute("src") === newSrc && img.complete && img.naturalWidth > 0){
+    // 이미 로드된 같은 이미지면 바로 그리기
+    draw();
+  } else {
+    img.onload = draw;
+    img.src = newSrc;
+  }
 }
 
 function renderOneMarker(h, track){
