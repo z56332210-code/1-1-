@@ -8,7 +8,9 @@
 <!--
   이미지 파일 경로 안내 (Image path notes)
   - 연습용 파노라마: ./assets/practice_pano.jpg  (Scene 2, 튜토리얼용)
-  - 매점 모퉁이 사진: ./assets/store_corner1.jpg ~ store_corner4.jpg (Scene 4, 본실험용)
+  - 매점 사진(얼굴 가림): ./assets/store_c1_A.jpg ~ store_c4_A.jpg  → A조건(원래 매점)
+  - 넛지 부착물 합성본:   ./assets/store_c1_B.jpg ~ store_c4_B.jpg  → B조건(넛지 매점)
+  참가자는 시작할 때 A/B 중 하나에 무작위 배정됩니다. (미리보기: 주소 끝에 ?cond=A 또는 ?cond=B)
   이 HTML 파일과 assets 폴더를 같은 위치에 두고 nudge_study.html을 더블클릭해서 열면 됩니다.
   로컬 서버 없이도 file:// 로 바로 동작하도록 설계했습니다.
 -->
@@ -318,6 +320,27 @@ td.mono, th.mono{font-family:'IBM Plex Mono',monospace;}
 .empty-state h4{margin:0 0 6px; color:var(--blue-900); font-size:15px;}
 .empty-state p{margin:0; font-size:13px; max-width:320px; margin:0 auto;}
 
+/* 세로로 긴 폰 화면에서 사진이 지나치게 확대돼 일부만 보이는 것을 막는다 */
+.pano-stage{max-height:80vw;}
+.q-block{margin:0 0 20px;}
+.q-title{font-size:14.5px; font-weight:800; color:var(--blue-900); line-height:1.5; margin:0 0 10px;}
+.opt-list{display:flex; flex-direction:column; gap:8px;}
+.opt-btn{
+  appearance:none; cursor:pointer; text-align:left; width:100%;
+  padding:13px 14px; border-radius:12px; border:1.5px solid var(--line);
+  background:#FBFCFE; color:var(--ink); font-size:14.5px; font-weight:600; transition:.12s;
+}
+.opt-btn.sel{border-color:var(--blue-700); background:var(--sky-100); color:var(--blue-900); box-shadow:0 0 0 3px rgba(79,163,227,.25);}
+.ab-card{background:#fff; border-radius:16px; padding:18px; box-shadow:var(--shadow-sm); border:1px solid var(--line); margin-bottom:18px;}
+.ab-card h3{margin:0 0 4px; font-size:13.5px; color:var(--blue-900); font-weight:800;}
+.ab-card p.desc{margin:0 0 12px; font-size:11.5px; color:#94A2B8;}
+.ab-row{display:grid; grid-template-columns:88px 1fr 64px; align-items:center; gap:10px; margin:8px 0; font-size:12.5px;}
+.ab-row .lab{font-weight:800; color:var(--blue-900);}
+.ab-row .lab small{display:block; font-weight:600; color:#8593AB; font-size:11px;}
+.ab-bar{height:22px; border-radius:6px; background:#EEF2F7; overflow:hidden;}
+.ab-bar i{display:block; height:100%; border-radius:6px; background:var(--blue-700);}
+.ab-bar i.b{background:var(--good);}
+.ab-row .val{font-family:'IBM Plex Mono',monospace; font-weight:700; text-align:right; color:var(--blue-900);}
 @media (max-width:860px){
   .kpi-grid{grid-template-columns:1fr; }
   .chart-grid{grid-template-columns:1fr;}
@@ -417,7 +440,7 @@ td.mono, th.mono{font-family:'IBM Plex Mono',monospace;}
     <div class="pano-stage" id="stage-store">
       <!-- store_corner1~4.jpg : 매점 사방 모퉁이 스틸컷 4장, 순환 회전 -->
       <div class="pano-track" id="track-store">
-        <img src="./assets/store_corner1.jpg" draggable="false" alt="매점 모퉁이"
+        <img src="./assets/store_c1_A.jpg" draggable="false" alt="매점 모퉁이"
              onerror="this.insertAdjacentHTML('afterend','<div class=\'pano-loaderr\' style=\'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;text-align:center;padding:20px;\'>이미지를 찾을 수 없어요.<br>'+this.getAttribute('src')+' 경로를 확인하세요.</div>')">
       </div>
       <div class="pano-fade left"></div>
@@ -431,6 +454,41 @@ td.mono, th.mono{font-family:'IBM Plex Mono',monospace;}
       <div class="swipe-cue l">‹</div>
       <div class="swipe-cue r">›</div>
       <div class="pano-swipehint" id="hint-store">좌우로 스와이프해서 매점 둘러보기</div>
+      <div class="tutorial-toast" id="toast-store" style="background:var(--blue-700);"></div>
+    </div>
+  </section>
+
+  <!-- ============ SCENE Q : 선택 후 확인 질문 (A/B 공통) ============ -->
+  <section class="scene" id="scene-q">
+    <div class="topbar">
+      <div class="brand"><span class="dot"></span>마지막 질문</div>
+      <div class="step-pips">
+        <span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip"></span>
+      </div>
+    </div>
+    <div class="center-wrap">
+      <div class="card">
+        <p class="eyebrow">2 Questions</p>
+        <div class="q-block">
+          <p class="q-title">1. 방금 매점 화면에서 안내 스티커나 표지판을 봤나요?</p>
+          <div class="opt-list" data-q="noticed_sign">
+            <button class="opt-btn" data-v="yes">봤다</button>
+            <button class="opt-btn" data-v="no">못 봤다</button>
+            <button class="opt-btn" data-v="unsure">잘 모르겠다</button>
+          </div>
+        </div>
+        <div class="q-block">
+          <p class="q-title">2. 그 간식을 고른 가장 큰 이유는?</p>
+          <div class="opt-list" data-q="choice_reason">
+            <button class="opt-btn" data-v="taste">먹고 싶어서 (맛)</button>
+            <button class="opt-btn" data-v="habit">평소에 자주 먹던 거라서</button>
+            <button class="opt-btn" data-v="salient">눈에 잘 띄어서</button>
+            <button class="opt-btn" data-v="sign">스티커·표지판을 보고</button>
+            <button class="opt-btn" data-v="health">건강을 생각해서</button>
+          </div>
+        </div>
+        <button class="btn" id="btn-q-done" disabled>제출하기</button>
+      </div>
     </div>
   </section>
 
@@ -490,6 +548,12 @@ td.mono, th.mono{font-family:'IBM Plex Mono',monospace;}
           </div>
         </div>
 
+        <div class="ab-card">
+          <h3>A/B 비교 · 물·우유 선택 비율</h3>
+          <p class="desc">이 기기에 저장된 응답만 집계됩니다. 전체 결과는 구글 시트에서 condition 열로 나눠 보세요.</p>
+          <div id="ab-summary"></div>
+        </div>
+
         <div class="chart-grid">
           <div class="chart-card">
             <h3>Visual Salience</h3>
@@ -517,7 +581,7 @@ td.mono, th.mono{font-family:'IBM Plex Mono',monospace;}
             <table>
               <thead>
                 <tr>
-                  <th>학번</th><th>이름</th><th>첫 클릭 구역</th><th>최종 선택 간식</th>
+                  <th>학번</th><th>이름</th><th>조건</th><th>첫 클릭 구역</th><th>최종 선택 간식</th><th>물·우유</th>
                   <th class="mono">소요시간(초)</th><th class="mono">탐색횟수</th><th>참여 일시</th>
                 </tr>
               </thead>
@@ -547,7 +611,7 @@ td.mono, th.mono{font-family:'IBM Plex Mono',monospace;}
     </div>
     <div class="pano-stage" id="stage-calib" style="margin-bottom:8px;">
       <div class="pano-track" id="track-calib">
-        <img src="./assets/store_corner1.jpg" draggable="false" alt="보정용 매점 사진">
+        <img src="./assets/store_c1_A.jpg" draggable="false" alt="보정용 매점 사진">
       </div>
       <div class="corner-badge" id="calib-corner-badge">
         <span class="on"></span><span></span><span></span><span></span>
@@ -625,29 +689,51 @@ function saveRecord(rec){
    ====================================================================== */
 const PRACTICE_HOTSPOT = { id:"white_pot", name:"흰색 화분", x:91, y:60, r:11 };
 
+/* v2: 사진을 보고 구역을 다시 잡았습니다. 좌표는 사진 기준 %, rx/ry는 가로/세로 반경(%).
+   name   = 학생에게 보이는 구역 이름(기록에도 이 이름이 남음)
+   ref    = 등급 조회용 대표 상품(PRODUCT_GRADES의 키). 구역 대표값이므로 실제 상품과 다를 수 있음
+   target = 넛지가 권하는 상품(물·우유) 구역 → 결과 분석의 핵심 지표(is_target)
+   goto   = 멀리 보이는 냉장고. 터치하면 선택이 아니라 그 냉장고 앞(해당 구역)으로 이동 */
 const CORNER_HOTSPOTS = {
   1: [
-    { id:"c1_candy", name:"새콤달콤", x:32, y:52, r:10 },
-    { id:"c1_fridge", name:"포카리스웨트", x:49, y:48, r:9 },
-    { id:"c1_freezer", name:"메로나", x:64, y:68, r:11 },
-    { id:"c1_chips", name:"새우깡", x:82, y:45, r:10 },
+    { id:"c1_candy", name:"젤리·사탕", x:42.1, y:43.2, rx:9.4, ry:18.9, ref:"새콤달콤" },
+    { id:"c1_fridge", name:"음료 냉장고", x:55.8, y:25.2, rx:4.0, ry:21.6, goto:2 },
+    { id:"c1_freezer", name:"아이스크림", x:67.7, y:61.2, rx:8.8, ry:22.5, ref:"메로나" },
+    { id:"c1_chips", name:"과자", x:76.7, y:27.0, rx:9.4, ry:27.0, ref:"새우깡" },
   ],
   2: [
-    { id:"c2_water", name:"생수", x:9,  y:55, r:9 },
-    { id:"c2_fridge", name:"레쓰비", x:25, y:45, r:9 },
-    { id:"c2_freezer", name:"죠스바", x:52, y:62, r:11 },
-    { id:"c2_chips", name:"도리토스", x:73, y:42, r:10 },
+    { id:"c2_energy", name:"에너지음료", x:4.0, y:18.2, rx:4.2, ry:10.0, ref:"몬스터에너지" },
+    { id:"c2_sports", name:"이온음료", x:3.5, y:43.4, rx:4.0, ry:13.6, ref:"포카리스웨트" },
+    { id:"c2_juice2", name:"과일 음료", x:3.3, y:68.0, rx:3.1, ry:11.3, ref:"피크닉(사과)" },
+    { id:"c2_cans", name:"과일맛 캔음료", x:14.0, y:19.9, rx:4.6, ry:8.6, ref:"웰치스포도" },
+    { id:"c2_juice", name:"과일 음료", x:13.8, y:41.5, rx:4.6, ry:10.3, ref:"피크닉(사과)" },
+    { id:"c2_soda", name:"탄산음료", x:14.2, y:65.5, rx:4.6, ry:10.8, ref:"펩시" },
+    { id:"c2_water", name:"생수", x:12.5, y:89.2, rx:7.1, ry:12.9, ref:"생수", target:true },
+    { id:"c2_fridgeB", name:"캔음료", x:24.2, y:48.1, rx:3.5, ry:43.9, ref:"레쓰비" },
+    { id:"c2_dairy", name:"유제품 냉장고", x:39.6, y:40.6, rx:4.4, ry:15.8, goto:3 },
+    { id:"c2_chips", name:"과자", x:53.5, y:23.2, rx:10.4, ry:24.9, ref:"도리토스" },
+    { id:"c2_bread", name:"빵", x:50.0, y:77.9, rx:10.4, ry:20.7, ref:"갈릭소세지빵" },
+    { id:"c2_freezer", name:"아이스크림", x:64.4, y:55.6, rx:9.0, ry:17.4, ref:"죠스바" },
+    { id:"c2_candy", name:"젤리·사탕", x:91.2, y:34.8, rx:9.0, ry:24.0, ref:"새콤달콤" },
   ],
   3: [
-    { id:"c3_dairy", name:"Vita500/VitaC", x:10, y:48, r:9 },
-    { id:"c3_chips", name:"꼬깔콘", x:29, y:42, r:10 },
-    { id:"c3_freezer", name:"설레임", x:50, y:58, r:10 },
-    { id:"c3_fridge", name:"나랑드사이다제로", x:93, y:48, r:8 },
+    { id:"c3_milk", name:"우유", x:4.2, y:77.7, rx:4.4, ry:15.8, ref:"서울우유딸기맛", target:true },
+    { id:"c3_lowcal", name:"2%·곤약젤리", x:6.9, y:52.2, rx:6.2, ry:11.2 },
+    { id:"c3_coffee", name:"캔커피", x:10.4, y:66.9, rx:2.9, ry:8.1, ref:"레쓰비" },
+    { id:"c3_choco", name:"초코바", x:11.0, y:84.5, rx:2.3, ry:7.2, ref:"스니커즈" },
+    { id:"c3_snackbox", name:"과자", x:9.2, y:15.3, rx:5.2, ry:10.8, ref:"꼬깔콘" },
+    { id:"c3_chips", name:"과자", x:21.9, y:50.4, rx:6.7, ry:49.5, ref:"꼬깔콘" },
+    { id:"c3_freezer", name:"아이스크림", x:41.7, y:54.0, rx:7.7, ry:17.1, ref:"설레임" },
+    { id:"c3_bread", name:"빵", x:48.3, y:80.9, rx:10.4, ry:19.8, ref:"갈릭소세지빵" },
+    { id:"c3_candy", name:"젤리·사탕", x:61.7, y:27.0, rx:10.4, ry:9.9, ref:"새콤달콤" },
+    { id:"c3_soda", name:"탄산음료", x:87.9, y:48.6, rx:7.7, ry:45.0, ref:"펩시" },
   ],
   4: [
-    { id:"c4_candy", name:"츄파춥스", x:20, y:48, r:11 },
-    { id:"c4_fridge", name:"펩시", x:90, y:48, r:9 },
-    { id:"c4_dairy", name:"서울우유(흰우유)", x:97, y:45, r:6 },
+    { id:"c4_candy", name:"막대사탕", x:22.9, y:52.5, rx:7.1, ry:13.6, ref:"츄파춥스" },
+    { id:"c4_candy2", name:"젤리·사탕", x:53.8, y:36.2, rx:10.4, ry:10.0, ref:"새콤달콤" },
+    { id:"c4_fridge", name:"음료 냉장고", x:74.6, y:25.4, rx:5.2, ry:19.0, goto:2 },
+    { id:"c4_freezer", name:"아이스크림", x:66.7, y:72.5, rx:12.1, ry:27.2, ref:"메로나" },
+    { id:"c4_chips", name:"과자", x:92.5, y:48.9, rx:7.7, ry:48.9, ref:"새우깡" },
   ],
 };
 
@@ -739,6 +825,7 @@ function makePanoViewer(stageEl, trackEl, arrowL, arrowR){
     apply();
   }
   function reset(){ offset = 0; apply(); }
+  function centerOn(pct){ const b = bounds(); offset = clamp(b.stageW/2 - (pct/100)*b.trackW); apply(); }
 
   function pointerDown(e){
     dragging = true; startT = Date.now();
@@ -782,7 +869,7 @@ function makePanoViewer(stageEl, trackEl, arrowL, arrowR){
   arrowR.addEventListener("click", ()=>nudge(-1));
 
   return {
-    reset,
+    reset, centerOn,
     setTapHandler(fn){ onTap = fn; },
     setFlingHandler(fn){ onFling = fn; },
     toPercent(clickX, clickY){
@@ -796,12 +883,12 @@ function makePanoViewer(stageEl, trackEl, arrowL, arrowR){
 }
 
 function nearestHotspot(hotspots, xPct, yPct){
-  // 반경 안에 있는 후보들 중에서만 가장 가까운 것을 찾는다.
-  // (반경 밖의 "가장 가까운" 핫스팟 때문에 엉뚱한 이름이 매칭되는 버그 수정)
+  // 타원(rx, ry) 안에 들어온 후보 중 중심에 가장 가까운 것. (rx/ry가 없으면 예전 방식의 r 사용)
   let best = null, bestDist = Infinity;
   hotspots.forEach(h=>{
-    const d = Math.hypot(h.x - xPct, h.y - yPct);
-    if(d <= h.r && d < bestDist){ bestDist = d; best = h; }
+    const rx = h.rx || h.r, ry = h.ry || h.r;
+    const d = Math.hypot((h.x - xPct)/rx, (h.y - yPct)/ry);
+    if(d <= 1 && d < bestDist){ bestDist = d; best = h; }
   });
   return best;
 }
@@ -829,8 +916,32 @@ document.getElementById("btn-start").addEventListener("click", ()=>{
   if(!ok) return;
   session.student_id = inSid.value.trim();
   session.name = inName.value.trim();
+  session.condition = pickCondition();
+  preloadStoreImages(session.condition);
   showScene("scene-2");
 });
+
+/* ======================================================================
+   A/B 조건 배정
+   A = 원래 매점 사진, B = 넛지 부착물이 합성된 매점 사진. 나머지 절차는 완전히 같다.
+   - 기본: 무작위. 단, 한 기기로 여러 명이 돌아가며 할 때 인원이 한쪽으로 쏠리지 않도록
+     이 기기에 저장된 A/B 인원을 보고 적은 쪽에 배정한다(같으면 무작위).
+   - 미리보기: 주소 끝에 ?cond=A 또는 ?cond=B 를 붙이면 그 조건으로 고정된다.
+   ====================================================================== */
+const APP_VERSION = "v2-ab";
+function pickCondition(){
+  const forced = new URLSearchParams(location.search).get("cond");
+  if(forced === "A" || forced === "B") return forced;
+  const all = loadData().filter(d=>d.app_version === APP_VERSION);
+  const a = all.filter(d=>d.condition === "A").length, b = all.filter(d=>d.condition === "B").length;
+  if(a !== b) return a < b ? "A" : "B";
+  return Math.random() < 0.5 ? "A" : "B";
+}
+function storeImgSrc(corner, cond){ return `./assets/store_c${corner}_${cond || session.condition || "A"}.jpg`; }
+function preloadStoreImages(cond){
+  // 구역을 넘길 때 사진 로딩 시간이 의사결정 시간에 섞이지 않도록 미리 받아둔다
+  [1,2,3,4].forEach(c=>{ const im = new Image(); im.src = storeImgSrc(c, cond); });
+}
 
 /* ======================================================================
    SCENE 2 — 튜토리얼
@@ -862,8 +973,11 @@ document.getElementById("btn-enter-store").addEventListener("click", ()=>{
   session.firstClick = null;
   session.currentCorner = 1;
   storeViewer.reset();
-  updateCornerUI();
   showScene("scene-4");
+  updateCornerUI();
+  const startTimer = ()=>{ session.decisionStart = performance.now(); };
+  if(storeImg.complete && storeImg.naturalWidth > 0) startTimer();
+  else storeImg.addEventListener("load", startTimer, {once:true});
 });
 
 /* ======================================================================
@@ -883,7 +997,11 @@ const storeViewer = makePanoViewer(
 function updateCornerUI(){
   const oldErr = stageStore.querySelector(".pano-loaderr");
   if(oldErr) oldErr.remove();
-  storeImg.src = `./assets/store_corner${session.currentCorner}.jpg`;
+  storeImg.src = storeImgSrc(session.currentCorner);
+  // 각 구역은 사진 가운데에서 시작한다 (A/B 동일 — 왼쪽 끝 복도 벽부터 보이던 문제 해결)
+  const center = ()=> storeViewer.centerOn(50);
+  if(storeImg.complete && storeImg.naturalWidth > 0) center();
+  else storeImg.addEventListener("load", center, {once:true});
   cornerBadge.forEach((el,i)=> el.classList.toggle("on", i === session.currentCorner-1));
   exploreCountEl.textContent = session.explorationCount;
 }
@@ -893,6 +1011,18 @@ function switchCorner(dir){
   storeViewer.reset();
   updateCornerUI();
   document.getElementById("hint-store").style.opacity = "0";
+}
+function goToCorner(n, label){
+  session.currentCorner = n;
+  session.explorationCount++;
+  storeViewer.reset();
+  updateCornerUI();
+  document.getElementById("hint-store").style.opacity = "0";
+  const toast = document.getElementById("toast-store");
+  toast.textContent = label + " 앞으로 이동했어요";
+  toast.classList.add("show");
+  clearTimeout(goToCorner._t);
+  goToCorner._t = setTimeout(()=>toast.classList.remove("show"), 1400);
 }
 document.getElementById("arrow-store-l").addEventListener("click", ()=>switchCorner(-1));
 document.getElementById("arrow-store-r").addEventListener("click", ()=>switchCorner(1));
@@ -911,9 +1041,14 @@ storeViewer.setTapHandler((x,y)=>{
       xPct: Math.round(xPct*10)/10, yPct: Math.round(yPct*10)/10
     };
   }
+  if(hit && hit.goto){
+    // 멀리 있는 냉장고: 선택이 아니라 그 앞으로 걸어가는 것으로 처리
+    goToCorner(hit.goto, hit.name);
+    return;
+  }
   if(hit){
-    // 학생 화면에는 상품 "이름"만 넘긴다 — 등급/가격은 여기서 절대 참조하지 않음
-    pendingChoice = { name: hit.name };
+    // 학생 화면에는 구역 "이름"만 넘긴다 — 등급/가격은 여기서 절대 참조하지 않음
+    pendingChoice = { name: hit.name, ref: hit.ref || "", target: !!hit.target, corner: session.currentCorner };
     document.getElementById("modal-item-name").textContent = hit.name;
     document.getElementById("modal-overlay").classList.add("show");
   }
@@ -931,24 +1066,60 @@ document.getElementById("modal-confirm").addEventListener("click", ()=>{
 
   // 행동 데이터만 — 로컬(localStorage)에 저장되고 #admin 대시보드에 표시되는 부분.
   // 등급/가격 등 연구자 전용 정보는 절대 포함하지 않는다.
-  const record = {
+  session.pendingRecord = {
     student_id: session.student_id,
     name: session.name,
+    condition: session.condition,
     first_click_item: session.firstClick ? session.firstClick.item : pendingChoice.name,
     first_click_corner: session.firstClick ? session.firstClick.corner : session.currentCorner,
     decision_time_sec: Math.round((decisionMs/1000)*100)/100,
     exploration_count: session.explorationCount,
     final_item: pendingChoice.name,
+    final_corner: pendingChoice.corner,
+    is_target: pendingChoice.target ? 1 : 0,
+    noticed_sign: "",
+    choice_reason: "",
+    app_version: APP_VERSION,
     timestamp: new Date().toISOString()
   };
+  session.pendingRef = pendingChoice.ref;
+  pendingChoice = null;
+
+  // 확인 질문 화면 초기화 후 이동
+  document.querySelectorAll("#scene-q .opt-btn").forEach(b=>b.classList.remove("sel"));
+  document.getElementById("btn-q-done").disabled = true;
+  showScene("scene-q");
+});
+
+/* ======================================================================
+   SCENE Q — 선택 후 확인 질문 (A/B 두 조건 모두 같은 질문)
+   noticed_sign : 부착물을 실제로 봤는지 (B에서 "봤다"가 많고 A에서 적어야 조작이 먹힌 것)
+   choice_reason: 고른 이유
+   ====================================================================== */
+document.querySelectorAll("#scene-q .opt-list").forEach(list=>{
+  list.addEventListener("click", (e)=>{
+    const btn = e.target.closest(".opt-btn");
+    if(!btn || !session.pendingRecord) return;
+    list.querySelectorAll(".opt-btn").forEach(b=>b.classList.remove("sel"));
+    btn.classList.add("sel");
+    session.pendingRecord[list.dataset.q] = btn.dataset.v;
+    const r = session.pendingRecord;
+    document.getElementById("btn-q-done").disabled = !(r.noticed_sign && r.choice_reason);
+  });
+});
+document.getElementById("btn-q-done").addEventListener("click", ()=>{
+  const record = session.pendingRecord;
+  if(!record) return;
+  session.pendingRecord = null;
   saveRecord(record);
   session.lastRecord = record;
 
   // 연구자 전용 전체 데이터 — 등급/가격 포함, 화면에는 절대 렌더링하지 않고
   // 구글시트 웹앱 URL로만 전송한다 (아래 GOOGLE_SHEET_WEBAPP_URL 설정 시 동작).
-  const grade = PRODUCT_GRADES[pendingChoice.name] || {};
+  const grade = PRODUCT_GRADES[session.pendingRef] || {};
   sendToGoogleSheet({
     ...record,
+    grade_ref: session.pendingRef || "",
     final_category: grade.category || "",
     final_price_krw: grade.price_krw || "",
     core_nutrition_grade: grade.core_nutrition_grade || "",
@@ -956,8 +1127,6 @@ document.getElementById("modal-confirm").addEventListener("click", ()=>{
     positive_nutrient_grade: grade.positive_nutrient_grade || "",
     total_grade: grade.total_grade || ""
   });
-
-  pendingChoice = null;
 
   document.getElementById("sum-item").textContent = record.final_item;
   document.getElementById("sum-time").textContent = record.decision_time_sec + "초";
@@ -1025,13 +1194,28 @@ function renderDashboard(){
     <tr>
       <td>${escapeHtml(d.student_id)}</td>
       <td>${escapeHtml(d.name)}</td>
+      <td>${escapeHtml(d.condition || "-")}</td>
       <td>${escapeHtml(d.first_click_item)} (${d.first_click_corner}구역)</td>
       <td>${escapeHtml(d.final_item)}</td>
+      <td>${d.is_target === 1 ? "○" : (d.is_target === 0 ? "" : "-")}</td>
       <td class="mono">${d.decision_time_sec.toFixed(2)}</td>
       <td class="mono">${d.exploration_count}</td>
       <td>${new Date(d.timestamp).toLocaleString('ko-KR')}</td>
     </tr>
   `).join("");
+
+  // A/B 요약: 조건별 인원, 물·우유(표적) 선택 비율
+  const abRows = [["A","원래 매점"],["B","넛지 매점"]].map(([c,label])=>{
+    const g = data.filter(d=>d.condition === c);
+    const hit = g.filter(d=>d.is_target === 1).length;
+    const pct = g.length ? Math.round(hit/g.length*1000)/10 : 0;
+    return `<div class="ab-row">
+      <div class="lab">${c} · ${label}<small>${g.length}명 중 ${hit}명</small></div>
+      <div class="ab-bar"><i class="${c==="B"?"b":""}" style="width:${pct}%"></i></div>
+      <div class="val">${g.length ? pct.toFixed(1)+"%" : "-"}</div>
+    </div>`;
+  }).join("");
+  document.getElementById("ab-summary").innerHTML = abRows;
 
   drawCharts(data, counts);
 }
@@ -1086,8 +1270,8 @@ function drawCharts(data, salienceCounts){
 document.getElementById("btn-export-csv").addEventListener("click", ()=>{
   const data = loadData();
   if(!data.length){ alert("다운로드할 데이터가 없습니다."); return; }
-  const headers = ["student_id","name","first_click_item","first_click_corner","decision_time_sec","exploration_count","final_item","timestamp"];
-  const rows = data.map(d=> headers.map(h=> `"${String(d[h]).replace(/"/g,'""')}"`).join(","));
+  const headers = ["student_id","name","condition","first_click_item","first_click_corner","decision_time_sec","exploration_count","final_item","final_corner","is_target","noticed_sign","choice_reason","app_version","timestamp"];
+  const rows = data.map(d=> headers.map(h=> `"${String(d[h] === undefined ? "" : d[h]).replace(/"/g,'""')}"`).join(","));
   const csv = "\uFEFF" + headers.join(",") + "\n" + rows.join("\n");
   const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
   const url = URL.createObjectURL(blob);
@@ -1171,7 +1355,7 @@ function renderCalibCorner(){
     hotspots.forEach(h=> renderOneMarker(h, track));
   }
 
-  const newSrc = `./assets/store_corner${calibCorner}.jpg`;
+  const newSrc = storeImgSrc(calibCorner, "A");
   if(img.getAttribute("src") === newSrc && img.complete && img.naturalWidth > 0){
     // 이미 로드된 같은 이미지면 바로 그리기
     draw();
@@ -1206,7 +1390,7 @@ function addNewHotspot(){
   const h = {
     id: `custom_${Date.now()}`,
     name: name.trim(),
-    x: 50, y: 50, r: 9
+    x: 50, y: 50, rx: 6, ry: 12
   };
   calibData[calibCorner].push(h);
   renderOneMarker(h, document.getElementById("track-calib"));
@@ -1273,7 +1457,12 @@ function exportCalibCode(){
   [1,2,3,4].forEach(c=>{
     out += `  ${c}: [\n`;
     calibData[c].forEach(h=>{
-      out += `    { id:"${h.id}", name:"${h.name}", x:${h.x}, y:${h.y}, r:${h.r} },\n`;
+      let extra = "";
+      if(h.ref) extra += `, ref:"${h.ref}"`;
+      if(h.target) extra += `, target:true`;
+      if(h.goto) extra += `, goto:${h.goto}`;
+      const size = (h.rx && h.ry) ? `rx:${h.rx}, ry:${h.ry}` : `r:${h.r}`;
+      out += `    { id:"${h.id}", name:"${h.name}", x:${h.x}, y:${h.y}, ${size}${extra} },\n`;
     });
     out += `  ],\n`;
   });
