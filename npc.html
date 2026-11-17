@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)} img{max-width:100%}</style>
+</head>
+<body>
+<title>가상 매점 NPC 시뮬레이션</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: 위에서 아래로 조작 → A·B 두 매점(3D) → 예측 결과 → 가정. 좁은 화면은 한 줄, 넓은 화면은 매점 둘이 나란히. */
+:root{
+  --bg:#F3F6FA; --surface:#FFFFFF; --ink:#0F2545; --muted:#566884; --line:#DAE2EC;
+  --navy:#1B3B6F; --sky:#2B79C4; --sky-soft:#E4F1FC; --good:#1B8A5A; --good-soft:#E2F4EA; --warn:#C2652A; --warn-soft:#FBEDE1; --on-accent:#FFFFFF;
+  --sc-sky:#E6EDF5; --sc-floor:#D8C6A6; --sc-wall:#C3CFDE; --sc-skin:#F0C8A4; --sc-shadow:rgba(15,37,69,.2); --sc-glass:#DDEBF7;
+  --fx-fridge:#8AA4C0; --fx-dairy:#79AF9F; --fx-freezer:#E6EAF0; --fx-rim:#D64545; --fx-snack:#DEAD55; --fx-candy:#E08AAC; --fx-bread:#B4865B; --fx-counter:#A3744A;
+  --font:'IBM Plex Sans KR',-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0A1524; --surface:#122138; --ink:#E7EEF8; --muted:#9DB0CB; --line:#24395A;
+  --navy:#9CC3F5; --sky:#5AA9EC; --sky-soft:#17304F; --good:#4CC38A; --good-soft:#123628; --warn:#F0985A; --warn-soft:#3A2414; --on-accent:#08121F;
+  --sc-sky:#0E1B2E; --sc-floor:#6E5E48; --sc-wall:#31445F; --sc-skin:#E3B893; --sc-shadow:rgba(0,0,0,.4); --sc-glass:#A9C6E2;
+  --fx-fridge:#6F8BAA; --fx-dairy:#5F9485; --fx-freezer:#B9C2CE; --fx-rim:#E05A5A; --fx-snack:#C0934A; --fx-candy:#C4779A; --fx-bread:#97704C; --fx-counter:#85603F;
+  color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0A1524; --surface:#122138; --ink:#E7EEF8; --muted:#9DB0CB; --line:#24395A;
+  --navy:#9CC3F5; --sky:#5AA9EC; --sky-soft:#17304F; --good:#4CC38A; --good-soft:#123628; --warn:#F0985A; --warn-soft:#3A2414; --on-accent:#08121F;
+  --sc-sky:#0E1B2E; --sc-floor:#6E5E48; --sc-wall:#31445F; --sc-skin:#E3B893; --sc-shadow:rgba(0,0,0,.4); --sc-glass:#A9C6E2;
+  --fx-fridge:#6F8BAA; --fx-dairy:#5F9485; --fx-freezer:#B9C2CE; --fx-rim:#E05A5A; --fx-snack:#C0934A; --fx-candy:#C4779A; --fx-bread:#97704C; --fx-counter:#85603F;
+  color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg); color:var(--ink); font-family:var(--font); font-size:15px; line-height:1.6;
+  padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); padding-block:20px 40px;}
+.wrap{max-width:1040px; margin:0 auto; display:flex; flex-direction:column; gap:16px}
+.mono{font-family:var(--mono); font-variant-numeric:tabular-nums}
+header{display:flex; flex-direction:column; gap:8px}
+h1{font-size:22px; line-height:1.35; margin:0; font-weight:700; text-wrap:balance}
+.chip{align-self:flex-start; font-size:12px; font-weight:700; padding:4px 10px; border-radius:999px; background:var(--warn-soft); color:var(--warn)}
+.lead{margin:0; color:var(--muted); font-size:14px; max-width:62ch}
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px}
+.controls{display:flex; flex-direction:column; gap:14px}
+.row{display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+button{font-family:inherit; font-size:14px; font-weight:600; border-radius:10px; border:1px solid var(--line); background:var(--surface); color:var(--ink); padding:9px 14px; cursor:pointer}
+button:focus-visible, input:focus-visible{outline:2px solid var(--sky); outline-offset:2px}
+button.primary{background:var(--navy); border-color:var(--navy); color:var(--on-accent)}
+.seg{display:flex; flex-wrap:wrap; gap:6px}
+.seg button{padding:7px 12px; font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--sky-soft); border-color:var(--sky); color:var(--navy)}
+.label{font-size:12px; font-weight:700; color:var(--muted); letter-spacing:.02em}
+.sliders{display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:12px 18px}
+.sl{display:flex; flex-direction:column; gap:2px; min-width:0}
+.sl .top{display:flex; justify-content:space-between; gap:8px; font-size:13px; font-weight:600}
+.sl .top output{font-family:var(--mono); color:var(--navy)}
+.sl input{width:100%; accent-color:var(--sky)}
+.sl small{font-size:11.5px; color:var(--muted); line-height:1.45}
+.stores{display:grid; grid-template-columns:1fr; gap:12px}
+@media (min-width:820px){ .stores{grid-template-columns:1fr 1fr} }
+.store{padding:12px; display:flex; flex-direction:column; gap:8px; min-width:0}
+.store-head{display:flex; justify-content:space-between; align-items:baseline; gap:8px; flex-wrap:wrap}
+.store-name{font-weight:700; font-size:15px}
+.store-name span{font-weight:500; color:var(--muted); font-size:12.5px; margin-left:6px}
+.tally{font-size:13px; color:var(--muted)}
+.tally b{font-family:var(--mono); color:var(--ink); font-size:15px}
+canvas{display:block; width:100%; height:clamp(215px, 58vw, 350px); border-radius:10px; background:var(--sc-sky); touch-action:pan-y; cursor:grab}
+.bar{height:8px; border-radius:6px; background:var(--line); overflow:hidden}
+.bar i{display:block; height:100%; width:0; background:var(--good); border-radius:6px}
+.hint{font-size:12px; color:var(--muted); margin:0}
+.result{display:flex; flex-direction:column; gap:12px}
+.result h2, .assume h2{font-size:16px; margin:0; font-weight:700}
+.nums{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px}
+.num{border:1px solid var(--line); border-radius:12px; padding:10px 12px; min-width:0}
+.num .k{font-size:12px; color:var(--muted); font-weight:600}
+.num .v{font-family:var(--mono); font-size:24px; font-weight:600; line-height:1.3}
+.num.diff{background:var(--good-soft); border-color:transparent}
+.num.diff .v{color:var(--good)}
+.sentence{margin:0; padding:12px; border-radius:10px; background:var(--sky-soft); font-size:14px}
+.note{margin:0; font-size:13px; color:var(--warn); font-weight:600}
+.persona{margin:0; font-size:13px; color:var(--muted)}
+.assume ol{margin:8px 0 0; padding-left:20px; display:flex; flex-direction:column; gap:6px; font-size:14px; max-width:68ch}
+.assume li b{font-weight:700}
+@media (max-width:420px){ .num .v{font-size:20px} h1{font-size:20px} }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="chip">예측 모델 · 실제 실험 아님</span>
+    <h1>가상 매점 NPC 시뮬레이션</h1>
+    <p class="lead">성향이 조금씩 다른 가상 학생(NPC)이 원래 매점(A)과 넛지 부착물이 있는 매점(B)에 똑같이 들어가 간식을 고릅니다. 아래 가정을 넣었을 때 결과가 어떻게 나올지 보여 주는 계산입니다.</p>
+  </header>
+
+  <section class="panel controls" aria-label="조작">
+    <div class="row">
+      <button class="primary" id="btn-play">일시정지</button>
+      <button id="btn-restart">처음부터</button>
+      <button id="btn-seed">새 NPC 뽑기</button>
+    </div>
+    <div>
+      <div class="label">넛지 효과 가정</div>
+      <div class="seg" id="presets" style="margin-top:6px">
+        <button data-d="0" aria-pressed="false">효과 없음 (0)</button>
+        <button data-d="0.2" aria-pressed="false">보수적 (0.2)</button>
+        <button data-d="0.45" aria-pressed="true">선행연구 평균 (0.45)</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="stores" aria-label="두 매점">
+    <div class="panel store">
+      <div class="store-head">
+        <div class="store-name">A<span>원래 매점</span></div>
+        <div class="tally">물·우유 <b id="t-a">0 / 0명</b> <span class="mono" id="p-a">0.0%</span></div>
+      </div>
+      <canvas id="cv-a" aria-label="A 매점 3D 화면"></canvas>
+      <div class="bar"><i id="b-a"></i></div>
+    </div>
+    <div class="panel store">
+      <div class="store-head">
+        <div class="store-name">B<span>넛지 매점 (발자국·초록 스티커·표지판)</span></div>
+        <div class="tally">물·우유 <b id="t-b">0 / 0명</b> <span class="mono" id="p-b">0.0%</span></div>
+      </div>
+      <canvas id="cv-b" aria-label="B 매점 3D 화면"></canvas>
+      <div class="bar"><i id="b-b"></i></div>
+    </div>
+  </section>
+  <p class="hint">화면을 좌우로 끌면 매점을 돌려 볼 수 있어요. 머리 위 초록 상자는 물·우유, 주황 상자는 그 밖의 간식입니다.</p>
+
+  <section class="panel controls" aria-label="가정 바꾸기">
+    <div class="label">가정 바꾸기 (바꾸면 처음부터 다시 실행됩니다)</div>
+    <div class="sliders">
+      <label class="sl"><span class="top">NPC 수 <output id="o-n"></output></span><input id="s-n" type="range" min="50" max="1000" step="50" value="300"></label>
+      <label class="sl"><span class="top">배속 <output id="o-speed"></output></span><input id="s-speed" type="range" min="1" max="100" step="1" value="20"></label>
+      <label class="sl"><span class="top">A 매점의 물·우유 선택 비율 <output id="o-base"></output></span><input id="s-base" type="range" min="1" max="40" step="1" value="10"><small>1장에서 조사한 실제 비율로 맞추세요. 지금 값은 예시입니다.</small></label>
+      <label class="sl"><span class="top">부착물을 알아보는 비율 <output id="o-notice"></output></span><input id="s-notice" type="range" min="0" max="100" step="5" value="70"><small>B 매점에서 스티커·표지판을 실제로 보는 NPC의 비율(가정).</small></label>
+      <label class="sl"><span class="top">효과 크기 d <output id="o-d"></output></span><input id="s-d" type="range" min="0" max="1" step="0.05" value="0.45"><small>0.45는 넛지 연구 200여 편을 모은 메타분석(Mertens 외, 2022)의 평균값입니다.</small></label>
+    </div>
+  </section>
+
+  <section class="panel result" aria-label="예측 결과">
+    <h2>전체 NPC 기준 예측 결과</h2>
+    <div class="nums">
+      <div class="num"><div class="k">A 원래 매점</div><div class="v" id="r-a">-</div></div>
+      <div class="num"><div class="k">B 넛지 매점</div><div class="v" id="r-b">-</div></div>
+      <div class="num diff"><div class="k">차이</div><div class="v" id="r-d">-</div></div>
+    </div>
+    <p class="sentence" id="r-text"></p>
+    <p class="persona" id="r-persona"></p>
+    <p class="note">이 숫자는 위에서 넣은 가정에서 나온 계산값입니다. 효과 크기를 0으로 두면 차이도 0이 됩니다. 실제 학생의 선택을 대신할 수 없습니다.</p>
+  </section>
+
+  <section class="panel assume" aria-label="가정">
+    <h2>NPC는 이렇게 만들어졌어요</h2>
+    <ol>
+      <li><b>성향 3가지.</b> NPC마다 입맛(무작위), 건강 관심도, 충동성(자동 시스템에 기대는 정도)이 다릅니다. 충동성이 높으면 빨리 고르고, 낮으면 오래 살핍니다.</li>
+      <li><b>A 매점은 실제 데이터에 맞춥니다.</b> 물·우유를 고르는 비율이 위 슬라이더 값과 같아지도록 보정합니다.</li>
+      <li><b>B 매점의 차이는 한 가지뿐입니다.</b> 부착물을 알아본 NPC만 물·우유를 고를 마음이 효과 크기 d만큼 커지고, 충동성이 높을수록 더 크게 반응합니다.</li>
+      <li><b>같은 NPC가 두 매점에 들어갑니다.</b> 성향과 운이 똑같으므로, 두 매점의 차이는 넛지 가정에서만 생깁니다.</li>
+    </ol>
+  </section>
+</div>
+
+<script>
+(function(){
+"use strict";
+const $ = id => document.getElementById(id);
+function rng(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+
+/* ---------------- 선택 모형 ---------------- */
+const CATS = [
+  {name:"과자", w:34, zone:"snack"}, {name:"젤리·사탕", w:16, zone:"candy"}, {name:"아이스크림", w:16, zone:"freezer"},
+  {name:"빵", w:10, zone:"bread"}, {name:"탄산·캔음료", w:14, zone:"fridge"},
+  {name:"물", t:0.6, zone:"fridge", target:true}, {name:"우유", t:0.4, zone:"dairy", target:true}
+];
+const P = { n:300, speed:20, base:10, notice:70, d:0.45, seed:20261116 };
+let pop = [], result = {a:0, b:0};
+
+function buildPopulation(){
+  const r = rng(P.seed), T = P.base/100, wsum = CATS.reduce((s,c)=>s+(c.w||0),0);
+  const lnS = CATS.map(c => Math.log(c.target ? T*c.t : (1-T)*c.w/wsum));
+  pop = [];
+  for(let i=0;i<P.n;i++){
+    pop.push({ eps: CATS.map(()=> -Math.log(-Math.log(r()*0.999998+1e-6))), health:r(), imp:r(), uNotice:r(), hue:r(), browse:r(), jit:r()-0.5 });
+  }
+  const GAMMA = 1.2;  // 건강 관심도가 물·우유 선호에 주는 영향
+  const pick = (p, extra) => { let b=0, bu=-1e9; for(let j=0;j<CATS.length;j++){ const u = lnS[j]+p.eps[j]+(CATS[j].target ? GAMMA*(p.health-0.5)+extra : 0); if(u>bu){bu=u;b=j;} } return b; };
+  // 보정: A 매점의 물·우유 비율이 설정값과 같아지는 상수 c를 찾는다
+  const want = Math.round(T*P.n), cnt = c => pop.reduce((s,p)=>s+(CATS[pick(p,c)].target?1:0),0);
+  let lo=-8, hi=8; for(let k=0;k<40;k++){ const mid=(lo+hi)/2; if(cnt(mid)<want) lo=mid; else hi=mid; }
+  const beta = P.d*Math.PI/Math.sqrt(3);   // 효과 크기 d → 로짓 단위
+  let a=0, b=0;
+  pop.forEach(p=>{
+    p.noticed = p.uNotice < P.notice/100;
+    p.a = pick(p, hi);
+    p.b = pick(p, hi + (p.noticed ? beta*(0.5+p.imp) : 0));
+    if(CATS[p.a].target) a++; if(CATS[p.b].target) b++;
+  });
+  result = {a, b};
+}
+
+/* ---------------- 매점 배치 (단위 m) ---------------- */
+const SW=9, SD=7, WALL=2.3;
+const FIX = [
+  {key:"candy",   label:"젤리·사탕",  x:2.2, z:0.6,  w:3.0, d:0.8, h:0.9, col:"--fx-candy"},
+  {key:"fridge",  label:"음료·물",    x:4.6, z:0.5,  w:1.4, d:0.8, h:2.0, col:"--fx-fridge", glass:true},
+  {key:"dairy",   label:"우유",       x:6.0, z:0.55, w:1.0, d:0.7, h:1.4, col:"--fx-dairy", glass:true},
+  {key:"snack",   label:"과자",       x:8.5, z:2.6,  w:0.7, d:3.6, h:1.8, col:"--fx-snack"},
+  {key:"freezer", label:"아이스크림", x:5.0, z:3.2,  w:2.4, d:1.0, h:0.9, col:"--fx-freezer", rim:true},
+  {key:"bread",   label:"빵",         x:3.0, z:3.4,  w:1.2, d:0.9, h:0.6, col:"--fx-bread"},
+  {key:"counter", label:"계산대",     x:7.4, z:6.0,  w:1.8, d:0.7, h:1.0, col:"--fx-counter"}
+];
+const BOXES = [];   // 긴 진열대는 잘라서 그려야 앞뒤 순서가 자연스럽다
+FIX.forEach(f=>{
+  const nx = Math.max(1, Math.round(f.w/1.2)), nz = Math.max(1, Math.round(f.d/1.2));
+  for(let i=0;i<nx;i++) for(let j=0;j<nz;j++){
+    const w=f.w/nx, d=f.d/nz;
+    BOXES.push({f, x0:f.x-f.w/2+i*w, x1:f.x-f.w/2+(i+1)*w, z0:f.z-f.d/2+j*d, z1:f.z-f.d/2+(j+1)*d, h:f.h, mid:(i===Math.floor(nx/2) && j===Math.floor(nz/2))});
+  }
+});
+const DOOR={x:-0.4,z:5.85}, ENTRY={x:1.2,z:5.2}, CHECK={x:7.0,z:5.15};
+const STAND={ snack:{x:7.6,z:2.6}, candy:{x:2.2,z:1.65}, freezer:{x:5.0,z:4.25}, bread:{x:3.0,z:4.35}, fridge:{x:4.6,z:1.65}, dairy:{x:6.0,z:1.65} };
+function route(zone, jit){
+  const s = STAND[zone], j = jit*0.3, back = (zone==="candy"||zone==="fridge"||zone==="dairy");
+  const p = [{x:DOOR.x,z:DOOR.z},{x:ENTRY.x,z:ENTRY.z+j, act:"notice"}];
+  if(back){ p.push({x:1.2,z:1.95+j},{x:s.x+j,z:1.95+j}); }
+  else if(zone==="snack"){ p.push({x:7.6,z:5.2+j}); }
+  else { p.push({x:s.x+j,z:5.2+j}); }
+  p.push({x:s.x+j,z:s.z, act:"browse"});
+  if(back){ p.push({x:s.x+j,z:1.95+j},{x:7.6,z:1.95+j},{x:7.6,z:4.9}); }
+  else if(zone==="snack"){ p.push({x:7.6,z:4.9}); }
+  else { p.push({x:s.x+j,z:5.2+j}); }
+  p.push({x:CHECK.x+j,z:CHECK.z, act:"pay"},{x:1.2,z:5.5+j},{x:DOOR.x,z:DOOR.z, act:"exit"});
+  return p;
+}
+
+/* ---------------- 진행 ---------------- */
+const stores = { a:mk("a"), b:mk("b") };
+function mk(c){ return {c, agents:[], spawned:0, picked:0, target:0, done:0}; }
+let simT=0, running=true, lastSpawn=-9;
+function resetRun(){
+  for(const k of ["a","b"]) Object.assign(stores[k], mk(k));
+  simT=0; lastSpawn=-9; running=true; syncPlay(); tallyDirty=true;
+}
+function spawn(store, i){
+  const p = pop[i], cat = CATS[store.c==="a" ? p.a : p.b];
+  store.agents.push({ p, cat, path:route(cat.zone, p.jit), seg:1, x:DOOR.x, z:DOOR.z, wait:0, item:false, bang:0 });
+  store.spawned++;
+}
+function step(dt){
+  simT += dt;
+  if(stores.a.spawned < P.n && simT-lastSpawn >= 0.9){ lastSpawn=simT; spawn(stores.a, stores.a.spawned); spawn(stores.b, stores.b.spawned); }
+  for(const k of ["a","b"]){
+    const st = stores[k];
+    for(let i=st.agents.length-1;i>=0;i--){
+      const ag = st.agents[i];
+      if(ag.bang>0) ag.bang -= dt;
+      if(ag.wait>0){ ag.wait -= dt; if(ag.wait<=0 && ag.pending){ ag.item=true; ag.pending=false; st.picked++; if(ag.cat.target) st.target++; tallyDirty=true; } continue; }
+      const t = ag.path[ag.seg], dx=t.x-ag.x, dz=t.z-ag.z, dist=Math.hypot(dx,dz), mv=1.4*dt;
+      if(dist<=mv){
+        ag.x=t.x; ag.z=t.z;
+        if(t.act==="notice" && k==="b" && ag.p.noticed) ag.bang=2.2;
+        if(t.act==="browse"){ ag.wait = ag.p.imp>0.5 ? 1+2*ag.p.browse : 4+4*ag.p.browse; ag.pending=true; }
+        if(t.act==="pay") ag.wait=1;
+        if(t.act==="exit"){ st.agents.splice(i,1); st.done++; continue; }
+        ag.seg++;
+      } else { ag.x+=dx/dist*mv; ag.z+=dz/dist*mv; }
+    }
+  }
+  if(stores.a.done>=P.n && stores.b.done>=P.n){ running=false; syncPlay(); }
+}
+
+/* ---------------- 3D 그리기 (직접 만든 원근 투영) ---------------- */
+const cam = { yaw:-0.36, pitch:0.62 };
+let TK = {};
+function readTokens(){
+  const cs = getComputedStyle(document.documentElement);
+  ["--sc-sky","--sc-floor","--sc-wall","--sc-skin","--sc-shadow","--sc-glass","--fx-fridge","--fx-dairy","--fx-freezer","--fx-rim","--fx-snack","--fx-candy","--fx-bread","--fx-counter","--good","--warn","--surface","--ink","--line","--sky"]
+    .forEach(n => TK[n] = cs.getPropertyValue(n).trim());
+}
+function shade(hex, f){
+  const n = parseInt(hex.slice(1),16), c = v => Math.max(0,Math.min(255,Math.round(v*f)));
+  return "rgb("+c(n>>16&255)+","+c(n>>8&255)+","+c(n&255)+")";
+}
+const views = { a:{cv:$("cv-a")}, b:{cv:$("cv-b")} };
+function sizeCanvas(v){
+  const r = v.cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio||1);
+  v.W = Math.max(50, r.width); v.H = Math.max(50, r.height);
+  v.cv.width = Math.round(v.W*dpr); v.cv.height = Math.round(v.H*dpr);
+  v.ctx = v.cv.getContext("2d"); v.ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+function raw(c,x,y,z){ const vx=x-c.cx, vy=y-c.cy, vz=z-c.cz, d=vx*c.fx+vy*c.fy+vz*c.fz; return [(vx*c.rx+vz*c.rz)/d, -(vx*c.ux+vy*c.uy+vz*c.uz)/d, d]; }
+function setupCam(v){
+  const D=14, tx=SW/2, ty=0.5, tz=SD/2, th=cam.yaw, ph=cam.pitch;
+  const c = { cx:tx+D*Math.cos(ph)*Math.sin(th), cy:ty+D*Math.sin(ph), cz:tz+D*Math.cos(ph)*Math.cos(th) };
+  let fx=tx-c.cx, fy=ty-c.cy, fz=tz-c.cz; const fl=Math.hypot(fx,fy,fz); fx/=fl; fy/=fl; fz/=fl;
+  let rx=-fz, rz=fx; const rl=Math.hypot(rx,rz); rx/=rl; rz/=rl;
+  Object.assign(c, {fx,fy,fz,rx,rz, ux:-rz*fy, uy:rz*fx-rx*fz, uz:rx*fy});
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  for(const X of [0,SW]) for(const Y of [0,WALL]) for(const Z of [0,SD]){ const p=raw(c,X,Y,Z); x0=Math.min(x0,p[0]); x1=Math.max(x1,p[0]); y0=Math.min(y0,p[1]); y1=Math.max(y1,p[1]); }
+  c.s = Math.min(v.W*0.96/(x1-x0), v.H*0.94/(y1-y0)); c.ox = v.W/2-c.s*(x0+x1)/2; c.oy = v.H/2-c.s*(y0+y1)/2;
+  v.c = c;
+}
+function pr(v,x,y,z){ const r=raw(v.c,x,y,z); return [v.c.ox+v.c.s*r[0], v.c.oy+v.c.s*r[1], r[2]]; }
+function poly(ctx, pts, fill, stroke, lw){
+  ctx.beginPath(); pts.forEach((p,i)=> i ? ctx.lineTo(p[0],p[1]) : ctx.moveTo(p[0],p[1])); ctx.closePath();
+  if(fill){ ctx.fillStyle=fill; ctx.fill(); } if(stroke){ ctx.strokeStyle=stroke; ctx.lineWidth=lw||1; ctx.stroke(); }
+}
+function faces(v, b, y0){
+  // 카메라를 향한 면만 고른다
+  const c=v.c, out=[], h=b.h, mx=(b.x0+b.x1)/2, mz=(b.z0+b.z1)/2, my=(y0+h)/2;
+  const add=(nx,ny,nz,px,py,pz,q,kind)=>{ if(nx*(c.cx-px)+ny*(c.cy-py)+nz*(c.cz-pz)>0) out.push({q:q.map(p=>pr(v,p[0],p[1],p[2])),kind}); };
+  add(0,1,0, mx,h,mz, [[b.x0,h,b.z0],[b.x1,h,b.z0],[b.x1,h,b.z1],[b.x0,h,b.z1]], "top");
+  add(0,0,1, mx,my,b.z1, [[b.x0,y0,b.z1],[b.x1,y0,b.z1],[b.x1,h,b.z1],[b.x0,h,b.z1]], "front");
+  add(0,0,-1, mx,my,b.z0, [[b.x0,y0,b.z0],[b.x1,y0,b.z0],[b.x1,h,b.z0],[b.x0,h,b.z0]], "side");
+  add(-1,0,0, b.x0,my,mz, [[b.x0,y0,b.z0],[b.x0,y0,b.z1],[b.x0,h,b.z1],[b.x0,h,b.z0]], "left");
+  add(1,0,0, b.x1,my,mz, [[b.x1,y0,b.z0],[b.x1,y0,b.z1],[b.x1,h,b.z1],[b.x1,h,b.z0]], "side");
+  return out;
+}
+function disc(v, x,y,z, rm, fill, mark){
+  const p=pr(v,x,y,z), r=Math.max(2.2, rm*v.c.s/p[2]), ctx=v.ctx;
+  ctx.beginPath(); ctx.arc(p[0],p[1],r*1.25,0,7); ctx.fillStyle="#fff"; ctx.fill();
+  ctx.beginPath(); ctx.arc(p[0],p[1],r,0,7); ctx.fillStyle=fill; ctx.fill();
+  if(mark && r>4){ ctx.strokeStyle="#fff"; ctx.lineWidth=Math.max(1.2,r*0.3); ctx.lineCap="round"; ctx.beginPath();
+    if(mark==="ok"){ ctx.moveTo(p[0]-r*0.45,p[1]); ctx.lineTo(p[0]-r*0.1,p[1]+r*0.35); ctx.lineTo(p[0]+r*0.5,p[1]-r*0.35); }
+    else { ctx.moveTo(p[0],p[1]-r*0.5); ctx.lineTo(p[0],p[1]+r*0.1); ctx.moveTo(p[0],p[1]+r*0.5); ctx.lineTo(p[0],p[1]+r*0.52); }
+    ctx.stroke(); }
+}
+function drawBox(v, b, nudge){
+  const ctx=v.ctx, f=b.f, base=TK[f.col];
+  for(const fc of faces(v,b,0)){
+    const k = fc.kind==="top" ? 1.06 : fc.kind==="front" ? 0.9 : fc.kind==="left" ? 0.8 : 0.72;
+    poly(ctx, fc.q, shade(base,k), shade(base,0.55), 0.6);
+    if(f.glass && fc.kind==="front"){   // 냉장고 유리문
+      const g=[[b.x0+0.08,0.25,b.z1+0.01],[b.x1-0.08,0.25,b.z1+0.01],[b.x1-0.08,b.h-0.2,b.z1+0.01],[b.x0+0.08,b.h-0.2,b.z1+0.01]].map(p=>pr(v,p[0],p[1],p[2]));
+      poly(ctx, g, TK["--sc-glass"], shade(base,0.55), 0.6);
+    }
+    if(f.rim && fc.kind==="top") poly(ctx, fc.q, null, TK["--fx-rim"], 2.2);
+  }
+  if(nudge && b.mid){
+    const mx=(b.x0+b.x1)/2, mz=(b.z0+b.z1)/2;
+    if(f.key==="fridge" || f.key==="dairy") disc(v, mx, b.h*0.78, b.z1+0.03, 0.17, TK["--good"], "ok");
+    if(f.key==="candy") disc(v, mx, b.h*0.6, b.z1+0.03, 0.11, TK["--fx-rim"], "no");
+    if(f.key==="snack") disc(v, b.x0-0.03, b.h*0.62, mz, 0.11, TK["--fx-rim"], "no");
+    if(f.key==="freezer") disc(v, mx, b.h*0.6, b.z1+0.03, 0.1, "#E0A100", null);
+    if(f.key==="counter"){   // 물방울 마스코트 표지판
+      const p0=pr(v,mx-0.32,b.h+0.62,mz), p1=pr(v,mx+0.32,b.h+0.05,mz), w=p1[0]-p0[0], hh=p1[1]-p0[1];
+      ctx.fillStyle="#fff"; ctx.strokeStyle=TK["--sky"]; ctx.lineWidth=1.2; ctx.beginPath(); ctx.rect(p0[0],p0[1],w,hh); ctx.fill(); ctx.stroke();
+      ctx.fillStyle="#3A96EB"; ctx.beginPath(); ctx.arc(p0[0]+w/2,p0[1]+hh*0.6,Math.max(2,hh*0.26),0,7); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(p0[0]+w/2,p0[1]+hh*0.12); ctx.lineTo(p0[0]+w/2-hh*0.2,p0[1]+hh*0.5); ctx.lineTo(p0[0]+w/2+hh*0.2,p0[1]+hh*0.5); ctx.fill();
+    }
+  }
+}
+function drawAgent(v, ag){
+  const ctx=v.ctx, ft=pr(v,ag.x,0,ag.z), hd=pr(v,ag.x,1.6,ag.z), hp=ft[1]-hd[1], w=hp*0.34;
+  ctx.fillStyle=TK["--sc-shadow"]; ctx.beginPath(); ctx.ellipse(ft[0],ft[1],w*0.75,w*0.3,0,0,7); ctx.fill();
+  ctx.fillStyle="hsl("+Math.round(ag.p.hue*360)+" 48% 46%)";
+  ctx.beginPath(); ctx.roundRect(ft[0]-w/2, hd[1]+hp*0.24, w, hp*0.76, w*0.38); ctx.fill();
+  ctx.fillStyle=TK["--sc-skin"]; ctx.beginPath(); ctx.arc(ft[0], hd[1]+hp*0.13, hp*0.13, 0, 7); ctx.fill();
+  if(ag.item){ const s=Math.max(4,hp*0.24); ctx.fillStyle="#fff"; ctx.fillRect(ft[0]-s/2-1.2, hd[1]-s-3.2, s+2.4, s+2.4);
+    ctx.fillStyle = ag.cat.target ? TK["--good"] : TK["--warn"]; ctx.fillRect(ft[0]-s/2, hd[1]-s-2, s, s); }
+  else if(ag.bang>0){ ctx.fillStyle=TK["--good"]; ctx.font="700 "+Math.max(9,hp*0.42)+"px sans-serif"; ctx.textAlign="center"; ctx.fillText("!", ft[0], hd[1]-3); }
+}
+function floorEllipse(v, cx, cz, ra, rb, ang, fill){
+  const pts=[]; for(let i=0;i<10;i++){ const t=i/10*Math.PI*2, ex=Math.cos(t)*ra, ez=Math.sin(t)*rb;
+    pts.push(pr(v, cx+ex*Math.cos(ang)-ez*Math.sin(ang), 0.01, cz+ex*Math.sin(ang)+ez*Math.cos(ang))); }
+  poly(v.ctx, pts, fill, "#fff", 0.8);
+}
+const FOOT = (function(){   // 입구 → 뒤쪽 통로 → 음료 냉장고로 이어지는 발자국
+  const line=[[0.5,5.6],[1.2,5.2],[1.2,1.95],[4.2,1.95]], out=[]; let side=1;
+  for(let i=0;i<line.length-1;i++){ const [x0,z0]=line[i],[x1,z1]=line[i+1], L=Math.hypot(x1-x0,z1-z0), a=Math.atan2(z1-z0,x1-x0);
+    for(let s=0.3;s<L;s+=0.55){ side=-side; out.push({x:x0+(x1-x0)*s/L-Math.sin(a)*0.13*side, z:z0+(z1-z0)*s/L+Math.cos(a)*0.13*side, a}); } }
+  return out;
+})();
+function render(k){
+  const v=views[k], st=stores[k], ctx=v.ctx, nudge=(k==="b");
+  setupCam(v); const c=v.c;
+  ctx.clearRect(0,0,v.W,v.H);
+  poly(ctx, [[0,0,0],[SW,0,0],[SW,0,SD],[0,0,SD]].map(p=>pr(v,p[0],p[1],p[2])), TK["--sc-floor"], shade(TK["--sc-floor"],0.7), 1);
+  // 벽: 카메라 반대편에 있는 것만
+  const walls=[ {n:[0,0,1], q:[[0,0,0],[SW,0,0],[SW,WALL,0],[0,WALL,0]]}, {n:[-1,0,0], q:[[SW,0,0],[SW,0,SD],[SW,WALL,SD],[SW,WALL,0]]},
+    {n:[1,0,0], q:[[0,0,0],[0,0,5.25],[0,WALL,5.25],[0,WALL,0]]}, {n:[1,0,0], q:[[0,0,6.45],[0,0,SD],[0,WALL,SD],[0,WALL,6.45]]} ];
+  ctx.globalAlpha=0.6;
+  for(const w of walls){ const m=w.q[0]; if(w.n[0]*(c.cx-m[0])+w.n[2]*(c.cz-m[2])>0) poly(ctx, w.q.map(p=>pr(v,p[0],p[1],p[2])), TK["--sc-wall"], shade(TK["--sc-wall"],0.75), 1); }
+  ctx.globalAlpha=1;
+  if(nudge){ for(const f of FOOT) floorEllipse(v, f.x, f.z, 0.17, 0.075, f.a, TK["--good"]); floorEllipse(v, 4.6, 1.95, 0.3, 0.3, 0, TK["--good"]); }
+  const items=[]; const depth=(x,y,z)=>raw(c,x,y,z)[2];
+  for(const b of BOXES) items.push({d:depth((b.x0+b.x1)/2,b.h/2,(b.z0+b.z1)/2), b});
+  for(const ag of st.agents) items.push({d:depth(ag.x,0.8,ag.z), ag});
+  items.sort((p,q)=>q.d-p.d);
+  for(const it of items){ if(it.b) drawBox(v,it.b,nudge); else drawAgent(v,it.ag); }
+  ctx.font="600 11px "+getComputedStyle(document.body).fontFamily; ctx.textAlign="center"; ctx.textBaseline="middle";
+  for(const f of FIX){ const p=pr(v,f.x,f.h+0.28,f.z), tw=ctx.measureText(f.label).width+10;
+    ctx.globalAlpha=0.86; ctx.fillStyle=TK["--surface"]; ctx.beginPath(); ctx.roundRect(p[0]-tw/2,p[1]-8,tw,16,8); ctx.fill();
+    ctx.globalAlpha=1; ctx.fillStyle=TK["--ink"]; ctx.fillText(f.label,p[0],p[1]+0.5); }
+  const dp=pr(v,0,0.25,5.85); ctx.fillStyle=TK["--ink"]; ctx.globalAlpha=0.7; ctx.fillText("입구",dp[0],dp[1]); ctx.globalAlpha=1; ctx.textBaseline="alphabetic";
+}
+
+/* ---------------- 화면 갱신 ---------------- */
+let tallyDirty=true;
+const pct = (a,n) => n ? (a/n*100).toFixed(1)+"%" : "0.0%";
+function updateTally(){
+  for(const k of ["a","b"]){ const s=stores[k];
+    $("t-"+k).textContent = s.target+" / "+s.picked+"명"; $("p-"+k).textContent = pct(s.target,s.picked);
+    $("b-"+k).style.width = (s.picked ? s.target/s.picked*100 : 0)+"%"; }
+  tallyDirty=false;
+}
+function updateResult(){
+  const n=P.n, a=result.a/n*100, b=result.b/n*100, diff=b-a;
+  $("r-a").textContent=a.toFixed(1)+"%"; $("r-b").textContent=b.toFixed(1)+"%"; $("r-d").textContent=(diff>=0?"+":"")+diff.toFixed(1)+"%p";
+  $("r-text").textContent = "가상 학생 "+n+"명에게 효과 크기 d="+P.d.toFixed(2)+", 부착물 인지율 "+P.notice+"%를 가정하면, 물·우유 선택은 "
+    +a.toFixed(1)+"%("+result.a+"명)에서 "+b.toFixed(1)+"%("+result.b+"명)로 "+(diff>=0?"":"-")+Math.abs(diff).toFixed(1)+"%p "+(diff>0?"늘 것으로":diff<0?"줄 것으로":"변하지 않을 것으로")+" 예측됩니다.";
+  const s1=pop.filter(p=>p.imp>0.5).length, hi=pop.filter(p=>p.health>0.66).length, nt=pop.filter(p=>p.noticed).length;
+  $("r-persona").textContent = "NPC 구성: 빨리 고르는 직관형 "+s1+"명 · 살펴보고 고르는 숙고형 "+(n-s1)+"명 · 건강 관심 높음 "+hi+"명 · B에서 부착물을 알아본 NPC "+nt+"명";
+}
+function syncPlay(){ const fin = stores.a.done>=P.n && stores.b.done>=P.n; $("btn-play").textContent = fin ? "다시 보기" : running ? "일시정지" : "시작"; }
+function syncLabels(){
+  $("o-n").textContent=P.n+"명"; $("o-speed").textContent=P.speed+"×"; $("o-base").textContent=P.base+"%"; $("o-notice").textContent=P.notice+"%"; $("o-d").textContent=P.d.toFixed(2);
+  document.querySelectorAll("#presets button").forEach(b=> b.setAttribute("aria-pressed", String(Math.abs(parseFloat(b.dataset.d)-P.d)<0.001)));
+}
+function rebuild(){ buildPopulation(); updateResult(); resetRun(); syncLabels(); }
+
+[["n","n"],["speed","speed"],["base","base"],["notice","notice"],["d","d"]].forEach(([id,key])=>{
+  const el=$("s-"+id);
+  el.addEventListener("input", ()=>{ P[key]=parseFloat(el.value); syncLabels(); if(key!=="speed") rebuild(); });
+});
+$("presets").addEventListener("click", e=>{ const b=e.target.closest("button"); if(!b) return; P.d=parseFloat(b.dataset.d); $("s-d").value=P.d; rebuild(); });
+$("btn-play").addEventListener("click", ()=>{ if(stores.a.done>=P.n && stores.b.done>=P.n){ resetRun(); return; } running=!running; syncPlay(); });
+$("btn-restart").addEventListener("click", resetRun);
+$("btn-seed").addEventListener("click", ()=>{ P.seed = (P.seed*1103515245+12345) & 0x7fffffff; rebuild(); });
+
+// 끌어서 돌리기 (두 화면이 함께 돈다)
+for(const k of ["a","b"]){
+  const cv=views[k].cv; let lastX=null;
+  cv.addEventListener("pointerdown", e=>{ lastX=e.clientX; try{ cv.setPointerCapture(e.pointerId); }catch(_){} });
+  cv.addEventListener("pointermove", e=>{ if(lastX===null) return; cam.yaw=Math.max(-1.25,Math.min(1.25,cam.yaw-(e.clientX-lastX)*0.008)); lastX=e.clientX; });
+  const end=()=>{ lastX=null; }; cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+}
+function resizeAll(){ sizeCanvas(views.a); sizeCanvas(views.b); }
+window.addEventListener("resize", resizeAll);
+if(window.ResizeObserver) new ResizeObserver(resizeAll).observe(views.a.cv);
+const mq = window.matchMedia("(prefers-color-scheme: dark)"); if(mq.addEventListener) mq.addEventListener("change", readTokens);
+new MutationObserver(readTokens).observe(document.documentElement, {attributes:true, attributeFilter:["data-theme"]});
+
+let last=0;
+function frame(t){
+  const dt = Math.min(0.05, (t-last)/1000 || 0); last=t;
+  if(running){ let left=dt*P.speed; while(left>1e-6){ const h=Math.min(0.2,left); step(h); left-=h; if(!running) break; } }
+  render("a"); render("b"); if(tallyDirty) updateTally();
+  requestAnimationFrame(frame);
+}
+readTokens(); resizeAll(); buildPopulation(); updateResult(); syncLabels();
+if(window.matchMedia("(prefers-reduced-motion: reduce)").matches){ running=false; }
+syncPlay(); updateTally();
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
